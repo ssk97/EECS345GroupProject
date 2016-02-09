@@ -1,1 +1,9 @@
-return false;
+if (false)
+  if (true)
+    return 1;
+  else
+    return 2;
+else if (false)
+  return 3;
+else
+  return 4;

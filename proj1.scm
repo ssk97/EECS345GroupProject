@@ -28,12 +28,12 @@
             (else (findVar varname (cdr state))))))
 ;Primary doing stuff
 (define evalBool
-    (lambda (condition statements parsetree state)
+    (lambda (condition statements state)
         (if (Mboolean condition state)
-            (interpret (cdr parsetree) (Mstate (car statements) state))
+            (Mstate (car statements) state)
             (if (pair? (cdr statements))
-                (interpret (cdr parsetree) (Mstate (cadr statements) state))
-                (interpret (cdr parsetree) state)))))
+                (Mstate (cadr statements) state)
+                state))))
 (define outputNice ;converts #t and #f to 'true and 'false respectively
     (lambda (a)
         (cond
@@ -41,26 +41,27 @@
             ((eq? a #f) 'false)
             (else a))))
 (define interpret
-  (lambda (parsetree state)
-    (cond
-        ((number? state) state)
-        ((boolean? state) (outputNice state))
-        ((eq? (caar parsetree) 'return) (outputNice (Mvalue (cadar parsetree) state)))
-        ((eq? (caar parsetree) 'if) (evalBool (cadar parsetree) (cddar parsetree) parsetree state))
-        (else (interpret (cdr parsetree) (Mstate (car parsetree) state))))))
+    (lambda (parsetree state)
+        (cond
+            ((number? state) state)
+            ((boolean? state) (outputNice state))
+            (else (interpret (cdr parsetree) (Mstate (car parsetree) state))))))
     
 (define Mstate
     (lambda (statement state)
         (cond
-            ((eq? (car statement) 'return) (Mvalue (cadr statement) state));this replaces state with a number
+            ((eq? (car statement) 'return) (Mvalue (cadr statement) state));this replaces state with a value
                                                                            ;and ends execution immediately
             ((eq? (car statement) 'var) (addVar (cdr statement) state))
             ((eq? (car statement) '=) (setVar (cdr statement) state))
+            ((eq? (car statement) 'if) (evalBool (cadr statement) (cddr statement) state))
             (else state)
 )))
 (define Mboolean
     (lambda (statement state)
         (cond
+            ((eq? statement 'true) #t)
+            ((eq? statement 'false) #f)
             ((eq? (car statement) '==) (eq? (Mvalue (cadr statement) state) (Mvalue (caddr statement) state)))
             ((eq? (car statement) '!=) (not (eq? (Mvalue (cadr statement) state) (Mvalue (caddr statement) state))))
             ((eq? (car statement) '>) (> (Mvalue (cadr statement) state) (Mvalue (caddr statement) state)))
