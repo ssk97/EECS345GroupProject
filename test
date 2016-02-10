@@ -1,9 +1,4 @@
-if (false)
-  if (true)
-    return 1;
-  else
-    return 2;
-else if (false)
-  return 3;
-else
-  return 4;
+var x = 2;
+while (x < 100)
+  x = x * 2;
+return x;
