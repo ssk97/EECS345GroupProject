@@ -1,6 +1,5 @@
 ;Ron Weber and Steven Knipe
 (load "simpleParser.scm")
-(interpreter "test")
 ;state is a list of pairs
 ;the first in the pair is the varname. the second is either the value (number/bool) or empty list if undefined
 (define interpreter
