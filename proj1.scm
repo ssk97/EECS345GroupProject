@@ -1,15 +1,23 @@
+;Ron Weber and Steven Knipe
 (load "simpleParser.scm")
+(interpreter "test")
 ;state is a list of pairs
 ;the first in the pair is the varname. the second is either the value (number/bool) or empty list if undefined
 (define interpreter
-    (lambda (filename)
-	(interpret (parser filename) '())))
+  (lambda (filename)
+    (interpret (parser filename) '())))
 ;dealing with variables
+(define varExists
+  (lambda (varname state)
+    (cond
+     ((null? state) #f)
+     ((eq? varname (caar state)) #t)
+     (else (varExists varname (cdr state))))))
 (define addVar
-    (lambda (info state)
-        (if (pair? (cdr info))
-            (cons (cons (car info) (Mvalue (cadr info) state)) state)
-            (cons (cons (car info) '()) state))))
+  (lambda (varname value state)
+    (if (varExists varname state)
+	(error "Variable declared multiple times.")
+        (cons (cons varname value) state))))
 (define removeVar
     (lambda (varname state)
         (cond
@@ -47,13 +55,16 @@
 (define operator car)
 (define operand1 cadr)
 (define operand2 caddr)
+(define operand2-or-empty
+  (lambda (l)
+    (if (null? (cddr l)) '() (operand2 l))))
 
 (define Mstate
     (lambda (statement state)
         (cond
 	 ((eq? (operator statement) 'return) (Mvalue (cadr statement) state));this replaces state with a value
 					;and ends execution immediately
-	 ((eq? (operator statement) 'var) (addVar (cdr statement) state))
+	 ((eq? (operator statement) 'var) (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state))
 	 ((eq? (operator statement) '=) (setVar (cdr statement) state))
 	 ((eq? (operator statement) 'if) (Mstate_if (cadr statement) (cddr statement) state)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
 	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state))
@@ -79,21 +90,22 @@
 	 )))
 
 (define Mvalue
-    (lambda (expr state)
-        (cond
-	 ((number? expr) expr)
-	 ((eq? expr 'true) #t)
-	 ((eq? expr 'false) #f)
-	 ((symbol? expr) (findVar expr state));variable
-	 ((eq? (operator expr) '+) (+ (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
-	 ((eq? (operator expr) '*) (* (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
-	 ((eq? (operator expr) '/) (quotient (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
-	 ((eq? (operator expr) '-) (if (eq? (length expr) 3)
-				       (- (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state))
-				       (- (Mvalue (operand1 expr) state))));unary - operator
-	 ((eq? (operator expr) '%) (remainder (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
-	 (else (Mboolean expr state))
-	 )))
+  (lambda (expr state)
+    (cond
+     ((null? expr) expr)
+     ((number? expr) expr)
+     ((eq? expr 'true) #t)
+     ((eq? expr 'false) #f)
+     ((symbol? expr) (findVar expr state));variable
+     ((eq? (operator expr) '+) (+ (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
+     ((eq? (operator expr) '*) (* (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
+     ((eq? (operator expr) '/) (quotient (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
+     ((eq? (operator expr) '-) (if (eq? (length expr) 3)
+				   (- (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state))
+				   (- (Mvalue (operand1 expr) state))));unary - operator
+     ((eq? (operator expr) '%) (remainder (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
+     (else (Mboolean expr state))
+     )))
 
 (define Mstate_while
     (lambda (condition statement state)
