@@ -108,17 +108,3 @@
             (if (pair? (cdr statements))
                 (Mstate (cadr statements) state)
                 state))))
-
-#|
-((var x)
- (= x 10) 
- (var y (+ (* 3 x) 5))
- (while (!= (% y x) 3) (= y (+ y 1)))
- (if (> x y)
-     (return x) 
-     (if (> (* x x) y))
-	 (return (* x x))
-	 (if (> (* x (+ x x)) y)
-	     (return (* x (+ x x)))
-	     (return (- y 1)))))) 
-|#
