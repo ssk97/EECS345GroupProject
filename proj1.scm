@@ -1,5 +1,6 @@
 ;Ron Weber and Steven Knipe
 (load "simpleParser.scm")
+(interpreter "test")
 ;state is a list of pairs
 ;the first in the pair is the varname. the second is either the value (number/bool) or empty list if undefined
 (define interpreter
@@ -24,10 +25,10 @@
 	 (else (cons (car state) (removeVar varname (cdr state)))))))
 					;Info is a 2 member list:name and the expression to set name to.
 (define setVar
-    (lambda (info state)
+    (lambda (varname value state)
 	(cond
 	 ((null? state) (error "Variable assigned before declared."))
-	 ((eq? (car info) (caar state)) (cons (cons (car info) (Mvalue (cadr info) state)) (cdr state)))
+	 ((eq? varname (caar state)) (cons (cons varname value) (cdr state)))
 	 (else (cons (car state) (setVar info (cdr state)))))))
 (define findVar
     (lambda (varname state)
@@ -64,7 +65,7 @@
 	 ((eq? (operator statement) 'return) (Mvalue (cadr statement) state));this replaces state with a value
 					;and ends execution immediately
 	 ((eq? (operator statement) 'var) (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state))
-	 ((eq? (operator statement) '=) (setVar (cdr statement) state))
+	 ((eq? (operator statement) '=) (setVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state))
 	 ((eq? (operator statement) 'if) (Mstate_if (cadr statement) (cddr statement) state)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
 	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state))
 	 (else state)
