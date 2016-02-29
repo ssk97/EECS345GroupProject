@@ -7,29 +7,33 @@
   (lambda (filename)
     (interpret (parser filename) '())))
 ;dealing with variables
+;Returns true if state contains a variable named varname
 (define varExists
   (lambda (varname state)
     (cond
      ((null? state) #f)
      ((eq? varname (caar state)) #t)
      (else (varExists varname (cdr state))))))
+;Adds a variable named varname with value to state.  Errors if it already exists
 (define addVar
   (lambda (varname value state)
     (if (varExists varname state)
 	(error "Variable declared multiple times.")
         (cons (cons varname value) state))))
+;Removes the variable with the name varname from state
 (define removeVar
     (lambda (varname state)
         (cond
 	 ((eq? varname (caar state)) (cdr state))
 	 (else (cons (car state) (removeVar varname (cdr state)))))))
-					;Info is a 2 member list:name and the expression to set name to.
+;Returns state modified so that the entry for varname is set to value.
 (define setVar
     (lambda (varname value state)
 	(cond
 	 ((null? state) (error "Variable assigned before declared."))
 	 ((eq? varname (caar state)) (cons (cons varname value) (cdr state)))
 	 (else (cons (car state) (setVar info (cdr state)))))))
+;Returns the value associated with varname in state
 (define findVar
     (lambda (varname state)
 	(cond
