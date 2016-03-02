@@ -3,9 +3,12 @@
 ;state is a list of substates
 ;a substate is a list of pairs with the same scope
 ;the first in the pair is the varname. the second is either the value (number/bool) or empty list if undefined
-(define interpreter
+(define interpret
   (lambda (filename)
-    (interpret (parser filename) '(()))))
+    (outputNice
+     (call/cc
+      (lambda (return-c)
+        (interpreter (parser filename) '(()) return-c))))))
 ;dealing with variables
 
 ;substate functions
@@ -83,13 +86,11 @@
 	 ((eq? a #t) 'true)
 	 ((eq? a #f) 'false)
 	 (else a))))
-(define interpret
-    (lambda (parsetree state)
+(define interpreter
+    (lambda (parsetree state return-c)
         (cond
-     ((null? parsetree) state) ;if you're at the end of your parsetree and haven't returned, return the full current state
-	 ((number? state) state)
-	 ((boolean? state) (outputNice state));if state is a single value, immediately return
-	 (else (interpret (cdr parsetree) (Mstate (car parsetree) state))))))
+         ((null? parsetree) state) ;if you're at the end of your parsetree and haven't returned, return the full current state
+	 (else (interpreter (cdr parsetree) (Mstate (car parsetree) state return-c) return-c)))))
 
 (define operator car)
 (define operand1 cadr)
@@ -99,15 +100,14 @@
     (if (null? (cddr l)) '() (operand2 l))))
 
 (define Mstate
-    (lambda (statement state)
+    (lambda (statement state return-c)
         (cond
-     ((eq? (operator statement) 'begin) (stateEnd (interpret (cdr statement) (stateBegin state))))
-	 ((eq? (operator statement) 'return) (Mvalue (cadr statement) state));this replaces state with a value
-					;and ends execution immediately
+         ((eq? (operator statement) 'begin) (stateEnd (interpreter (cdr statement) (stateBegin state) return-c)))
+	 ((eq? (operator statement) 'return) (return-c (Mvalue (cadr statement) state)))
 	 ((eq? (operator statement) 'var) (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state))
 	 ((eq? (operator statement) '=) (setVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state))
-	 ((eq? (operator statement) 'if) (Mstate_if (cadr statement) (cddr statement) state)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
-	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state))
+	 ((eq? (operator statement) 'if) (Mstate_if (cadr statement) (cddr statement) state return-c)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
+	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state return-c))
 	 (else state)
 	 )))
 
@@ -148,17 +148,17 @@
      )))
 
 (define Mstate_while
-    (lambda (condition statement state)
+    (lambda (condition statement state return-c)
         (if (Mboolean condition state)
-            (Mstate_while condition statement (Mstate statement state))
+            (Mstate_while condition statement (Mstate statement state return-c) return-c)
             state)))
 
 (define Mstate_if
-    (lambda (condition statements state)
+    (lambda (condition statements state return-c)
         (if (Mboolean condition state)
-            (Mstate (car statements) state)
-            (if (pair? (cdr statements))
-                (Mstate (cadr statements) state)
+            (Mstate (car statements) state return-c)
+            (if (pair? (cdr statements));Else
+                (Mstate (cadr statements) state return-c)
                 state))))
 
-(interpreter "test")
+(interpret "test")
