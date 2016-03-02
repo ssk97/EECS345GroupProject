@@ -1,6 +1,5 @@
 ;Ron Weber and Steven Knipe
 (load "simpleParser.scm")
-(interpreter "test")
 ;state is a list of substates
 ;a substate is a list of pairs with the same scope
 ;the first in the pair is the varname. the second is either the value (number/bool) or empty list if undefined
@@ -8,6 +7,9 @@
   (lambda (filename)
     (interpret (parser filename) '())))
 ;dealing with variables
+
+;substate functions
+
 ;Returns true if the substate contains a variable named varname
 (define varExists_sub
   (lambda (varname substate)
@@ -25,17 +27,51 @@
 (define setVar_sub
     (lambda (varname value substate)
 	(cond
-	 ((null? substate) (error "Variable assigned before declared."))
+	 ((null? substate) (error "Variable assigned before declared- setVar_sub"))
 	 ((eq? varname (caar substate)) (cons (cons varname value) (cdr substate)))
-	 (else (cons (car substate) (setVar varname value (cdr substate)))))))
+	 (else (cons (car substate) (setVar_sub varname value (cdr substate)))))))
 ;Returns the value associated with varname in substate
 (define findVar_sub
     (lambda (varname substate)
 	(cond
-	 ((null? substate) (error "Variable used before declared."))
+	 ((null? substate) (error "Variable used before declared- findVar_sub"))
 	 ((not (eq? varname (caar substate))) (findVar_sub varname (cdr substate)))
 	 ((null? (cdar substate)) (error "Variable used before assigned."))
 	 (else (cdar substate)))))
+     
+;functions that work across entire state
+(define varExists
+    (lambda (varname state)
+        (cond
+            ((null? state) #f)
+            ((varExists_sub varname (car state)) #t)
+            (else (varExists varname (cdr state))))))
+;Adds varname to the topmost substate
+(define addVar
+    (lambda (varname state)
+        (addVar_sub varname (car state))))
+;returns state modified so that varname is set to value
+(define setVar
+    (lambda (varname state)
+        (cond
+            ((null? state) (error "Variable used before declared- setVar"))
+            ((varExists_sub varname (car state)) (cons (setVar_sub varname (car state)) (cdr state)))
+            (else (cons (car state) (setVar varname value (cdr state)))))))
+;returns the variable varname
+(define findVar
+    (lambda (varname state)
+	(cond
+	 ((null? state) (error "Variable used before declared- findVar"))
+	 ((varExists_sub varname (car state)) (findVar_sub varname (car state)))
+	 (else (findVar varname (cdr state))))))
+;adds one more layer of scope onto state
+(define stateDown
+    (lambda (state)
+        (cons '() state)))
+;removes a layer of scope from state
+(define stateUp
+    (lambda (state)
+        (cdr state)))
 ;Primary doing stuff
 ;converts #t and #f to 'true and 'false respectively
 (define outputNice 
@@ -119,3 +155,5 @@
             (if (pair? (cdr statements))
                 (Mstate (cadr statements) state)
                 state))))
+
+(interpreter "test")
