@@ -32,7 +32,7 @@
 	(cond
 	 ((null? state) (error "Variable assigned before declared."))
 	 ((eq? varname (caar state)) (cons (cons varname value) (cdr state)))
-	 (else (cons (car state) (setVar info (cdr state)))))))
+	 (else (cons (car state) (setVar varname value (cdr state)))))))
 ;Returns the value associated with varname in state
 (define findVar
     (lambda (varname state)
