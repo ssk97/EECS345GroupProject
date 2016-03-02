@@ -1,46 +1,41 @@
 ;Ron Weber and Steven Knipe
 (load "simpleParser.scm")
 (interpreter "test")
-;state is a list of pairs
+;state is a list of substates
+;a substate is a list of pairs with the same scope
 ;the first in the pair is the varname. the second is either the value (number/bool) or empty list if undefined
 (define interpreter
   (lambda (filename)
     (interpret (parser filename) '())))
 ;dealing with variables
-;Returns true if state contains a variable named varname
-(define varExists
-  (lambda (varname state)
+;Returns true if the substate contains a variable named varname
+(define varExists_sub
+  (lambda (varname substate)
     (cond
-     ((null? state) #f)
-     ((eq? varname (caar state)) #t)
-     (else (varExists varname (cdr state))))))
-;Adds a variable named varname with value to state.  Errors if it already exists
-(define addVar
-  (lambda (varname value state)
-    (if (varExists varname state)
+     ((null? substate) #f)
+     ((eq? varname (caar substate)) #t)
+     (else (varExists_sub varname (cdr substate))))))
+;Adds a variable named varname with value to substate.  Errors if it already exists
+(define addVar_sub
+  (lambda (varname value substate)
+    (if (varExists varname substate)
 	(error "Variable declared multiple times.")
-        (cons (cons varname value) state))))
-;Removes the variable with the name varname from state
-(define removeVar
-    (lambda (varname state)
-        (cond
-	 ((eq? varname (caar state)) (cdr state))
-	 (else (cons (car state) (removeVar varname (cdr state)))))))
-;Returns state modified so that the entry for varname is set to value.
-(define setVar
-    (lambda (varname value state)
+        (cons (cons varname value) substate))))
+;Returns substate modified so that the entry for varname is set to value.
+(define setVar_sub
+    (lambda (varname value substate)
 	(cond
-	 ((null? state) (error "Variable assigned before declared."))
-	 ((eq? varname (caar state)) (cons (cons varname value) (cdr state)))
-	 (else (cons (car state) (setVar info (cdr state)))))))
-;Returns the value associated with varname in state
-(define findVar
-    (lambda (varname state)
+	 ((null? substate) (error "Variable assigned before declared."))
+	 ((eq? varname (caar substate)) (cons (cons varname value) (cdr substate)))
+	 (else (cons (car substate) (setVar info (cdr substate)))))))
+;Returns the value associated with varname in substate
+(define findVar_sub
+    (lambda (varname substate)
 	(cond
-	 ((null? state) (error "Variable used before declared."))
-	 ((not (eq? varname (caar state))) (findVar varname (cdr state)))
-	 ((null? (cdar state)) (error "Variable used before assigned."))
-	 (else (cdar state)))))
+	 ((null? substate) (error "Variable used before declared."))
+	 ((not (eq? varname (caar substate))) (findVar_sub varname (cdr substate)))
+	 ((null? (cdar substate)) (error "Variable used before assigned."))
+	 (else (cdar substate)))))
 ;Primary doing stuff
 ;converts #t and #f to 'true and 'false respectively
 (define outputNice 
