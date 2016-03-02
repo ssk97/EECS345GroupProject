@@ -5,7 +5,7 @@
 ;the first in the pair is the varname. the second is either the value (number/bool) or empty list if undefined
 (define interpreter
   (lambda (filename)
-    (interpret (parser filename) '())))
+    (interpret (parser filename) '(()))))
 ;dealing with variables
 
 ;substate functions
@@ -20,7 +20,7 @@
 ;Adds a variable named varname with value to substate.  Errors if it already exists
 (define addVar_sub
   (lambda (varname value substate)
-    (if (varExists varname substate)
+    (if (varExists_sub varname substate)
 	(error "Variable declared multiple times.")
         (cons (cons varname value) substate))))
 ;Returns substate modified so that the entry for varname is set to value.
@@ -48,14 +48,14 @@
             (else (varExists varname (cdr state))))))
 ;Adds varname to the topmost substate
 (define addVar
-    (lambda (varname state)
-        (addVar_sub varname (car state))))
+    (lambda (varname value state)
+        (cons (addVar_sub varname value (car state)) (cdr state))))
 ;returns state modified so that varname is set to value
 (define setVar
-    (lambda (varname state)
+    (lambda (varname value state)
         (cond
             ((null? state) (error "Variable used before declared- setVar"))
-            ((varExists_sub varname (car state)) (cons (setVar_sub varname (car state)) (cdr state)))
+            ((varExists_sub varname (car state)) (cons (setVar_sub varname value (car state)) (cdr state)))
             (else (cons (car state) (setVar varname value (cdr state)))))))
 ;returns the variable varname
 (define findVar
@@ -65,13 +65,16 @@
 	 ((varExists_sub varname (car state)) (findVar_sub varname (car state)))
 	 (else (findVar varname (cdr state))))))
 ;adds one more layer of scope onto state
-(define stateDown
+(define stateBegin
     (lambda (state)
         (cons '() state)))
 ;removes a layer of scope from state
-(define stateUp
+(define stateEnd
     (lambda (state)
-        (cdr state)))
+        (if (list? state)
+            (cdr state);normal case
+            state)));if program has ended, and you are returning a value
+  
 ;Primary doing stuff
 ;converts #t and #f to 'true and 'false respectively
 (define outputNice 
@@ -83,6 +86,7 @@
 (define interpret
     (lambda (parsetree state)
         (cond
+     ((null? parsetree) state) ;if you're at the end of your parsetree and haven't returned, return the full current state
 	 ((number? state) state)
 	 ((boolean? state) (outputNice state));if state is a single value, immediately return
 	 (else (interpret (cdr parsetree) (Mstate (car parsetree) state))))))
@@ -97,6 +101,7 @@
 (define Mstate
     (lambda (statement state)
         (cond
+     ((eq? (operator statement) 'begin) (stateEnd (interpret (cdr statement) (stateBegin state))))
 	 ((eq? (operator statement) 'return) (Mvalue (cadr statement) state));this replaces state with a value
 					;and ends execution immediately
 	 ((eq? (operator statement) 'var) (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state))
