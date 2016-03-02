@@ -27,7 +27,7 @@
 	(cond
 	 ((null? substate) (error "Variable assigned before declared."))
 	 ((eq? varname (caar substate)) (cons (cons varname value) (cdr substate)))
-	 (else (cons (car substate) (setVar info (cdr substate)))))))
+	 (else (cons (car substate) (setVar varname value (cdr substate)))))))
 ;Returns the value associated with varname in substate
 (define findVar_sub
     (lambda (varname substate)
