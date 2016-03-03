@@ -117,10 +117,11 @@
 	 ((eq? (operator statement) 'return) (return-c (Mvalue (cadr statement) state)))
 	 ((eq? (operator statement) 'var) (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
 	 ((eq? (operator statement) '=) (normal-c (setVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
-	 ((eq? (operator statement) 'if) (normal-c (Mstate_if (cadr statement) (cddr statement) state return-c break-c continue-c throw-c normal-c))) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
+	 ((eq? (operator statement) 'if) (Mstate_if (cadr statement) (cddr statement) state return-c break-c continue-c throw-c normal-c)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
          ;"This is going to be such a mindf*ck" -Prince Nebulon
 	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state return-c normal-c continue-c throw-c normal-c))
          ((eq? (operator statement) 'continue) (continue-c state))
+         ((eq? (operator statement) 'break) (break-c state))
 	 (else (normal-c state))
 	 )))
 
