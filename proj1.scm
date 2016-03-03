@@ -1,8 +1,6 @@
 ;Ron Weber and Steven Knipe
 (load "simpleParser.scm")
-;state is a list of substates
-;a substate is a list of pairs with the same scope
-;the first in the pair is the varname. the second is either the value (number/bool) or empty list if undefined
+
 (define interpret
   (lambda (filename)
     (outputNice
@@ -11,15 +9,27 @@
         (interpreter
          (parser filename)
          '(())
-         return-c
-         (lambda(x)(error "Break not in loop."))
-         (lambda(x)(error "Continue not in loop."))
-         (lambda(x)(error "Throw not in try"))
-         (lambda (v) v)))))))
+         return-c ;Where return goes
+         (lambda(x)(error "Break not in loop.")) ;Break
+         (lambda(x)(error "Continue not in loop.")) ;Continue
+         (lambda(x y)(error "Throw not in try")) ;Throw
+         (lambda (v) v))))))) ;Normal exit.  Ejects the whole state.
+
+;converts #t and #f to 'true and 'false respectively
+(define outputNice 
+    (lambda (a)
+        (cond
+	 ((eq? a #t) 'true)
+	 ((eq? a #f) 'false)
+	 (else a))))
+
 ;dealing with variables
 
-;substate functions
+;state is a list of substates
+;a substate is a list of pairs with the same scope
+;the first in the pair is the varname. the second is either the value (number/bool) or empty list if undefined
 
+;substate functions
 ;Returns true if the substate contains a variable named varname
 (define varExists_sub
   (lambda (varname substate)
@@ -44,12 +54,13 @@
 (define findVar_sub
     (lambda (varname substate)
 	(cond
-	 ((null? substate) (error "Variable used before declared- findVar_sub"))
-	 ((not (eq? varname (caar substate))) (findVar_sub varname (cdr substate)))
+	 ((null? substate) (error "Variable used before declared- findVar_sub"));We've gone too far, there are no substates left
+	 ((not (eq? varname (caar substate))) (findVar_sub varname (cdr substate))) ;Didn't find it, iterate
 	 ((null? (cdar substate)) (error "Variable used before assigned."))
 	 (else (cdar substate)))))
      
 ;functions that work across entire state
+;Check if a variable with varname as a name exists in the state at all
 (define varExists
     (lambda (varname state)
         (cond
@@ -57,10 +68,12 @@
             ((varExists_sub varname (car state)) #t)
             (else (varExists varname (cdr state))))))
 ;Adds varname to the topmost substate
+;Takes a name, value, and state
 (define addVar
     (lambda (varname value state)
         (cons (addVar_sub varname value (car state)) (cdr state))))
 ;returns state modified so that varname is set to value
+;Takes a name, value, and state to modify
 (define setVar
     (lambda (varname value state)
         (cond
@@ -81,20 +94,14 @@
 ;removes a layer of scope from state
 (define stateEnd
     (lambda (state)
-      (cdr state)));normal case
+      (cdr state)))
   
 ;Primary doing stuff
-;converts #t and #f to 'true and 'false respectively
-(define outputNice 
-    (lambda (a)
-        (cond
-	 ((eq? a #t) 'true)
-	 ((eq? a #f) 'false)
-	 (else a))))
+
 (define interpreter
     (lambda (parsetree state return-c break-c continue-c throw-c normal-c)
         (cond
-         ((null? parsetree) state) ;if you're at the end of your parsetree and haven't returned, return the full current state
+         ((null? parsetree) (normal-c state)) ;if you're at the end of your parsetree and haven't returned, return the full current state
          (else (Mstate (car parsetree) state return-c break-c continue-c throw-c
                        (lambda (v)
                          (interpreter (cdr parsetree) v return-c break-c continue-c throw-c normal-c)))))))
@@ -102,6 +109,7 @@
 (define operator car)
 (define operand1 cadr)
 (define operand2 caddr)
+(define operand3 cadddr)
 (define operand2-or-empty
   (lambda (l)
     (if (null? (cddr l)) '() (operand2 l))))
@@ -112,7 +120,7 @@
          ((eq? (operator statement) 'begin) (normal-c (interpreter (cdr statement) (stateBegin state) return-c
                                                          (lambda (v) (break-c (stateEnd v)))
                                                          (lambda (v) (continue-c (stateEnd v)))
-                                                         (lambda (v) (throw-c (stateEnd v)))
+                                                         (lambda (v v2) (throw-c (stateEnd v) v2))
                                                          (lambda (v) (normal-c (stateEnd v))))))
 	 ((eq? (operator statement) 'return) (return-c (Mvalue (cadr statement) state)))
 	 ((eq? (operator statement) 'var) (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
@@ -120,6 +128,8 @@
 	 ((eq? (operator statement) 'if) (Mstate_if (cadr statement) (cddr statement) state return-c break-c continue-c throw-c normal-c)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
          ;"This is going to be such a mindf*ck" -Prince Nebulon
 	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state return-c normal-c continue-c throw-c normal-c))
+         ((eq? (operator statement) 'try) (Mstate_try (operand1 statement) (operand2 statement) (operand3 statement) state return-c break-c continue-c throw-c normal-c))
+         ((eq? (operator statement) 'throw) (throw-c state (operand1 statement)))
          ((eq? (operator statement) 'continue) (continue-c state))
          ((eq? (operator statement) 'break) (break-c state))
 	 (else (normal-c state))
@@ -176,6 +186,23 @@
             (Mstate (car statements) state return-c break-c continue-c throw-c normal-c)
             (if (pair? (cdr statements));Else
                 (Mstate (cadr statements) state return-c break-c continue-c throw-c normal-c)
-                state))))
+                (normal-c state)))))
+
+(define Mstate_try
+  (lambda (tryBody catch finally state return-c break-c continue-c throw-c normal-c)
+    (let* ((execute-finally
+            (lambda(v) (if (null? finally)
+                           (normal-c v) ;No finally.
+                           (interpreter (cadr finally) v return-c break-c continue-c throw-c normal-c))))
+           (execute-catch
+            (lambda(v thrown) (if (null? catch)
+                           (execute-finally v)
+                           (interpreter (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) return-c ;Yes, the thrown exception gets its own motherfucking layer.  Otherwise, how would catch (e) return e; work?
+                                        (lambda (v) (break-c (stateEnd v))) ;So we reimplement what begin does here.
+                                        (lambda (v) (continue-c (stateEnd v)))
+                                        (lambda (v1 v2) (throw-c (stateEnd v1) v2)) ;This will only execute if you throw inside a catch.  MY brain hurts.
+                                        (lambda (v) (execute-finally (stateEnd v))))))))
+      (interpreter tryBody state return-c break-c continue-c execute-catch execute-finally))))
+                           
 
 (interpret "test")
