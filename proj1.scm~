@@ -8,14 +8,7 @@
     (outputNice
      (call/cc
       (lambda (return-c)
-        (interpreter
-         (parser filename)
-         '(())
-         return-c
-         (lambda(x)(error "Break not in loop."))
-         (lambda(x)(error "Continue not in loop."))
-         (lambda(x)(error "Throw not in try"))
-         (lambda (v) v)))))))
+        (interpreter (parser filename) '(()) return-c))))))
 ;dealing with variables
 
 ;substate functions
@@ -81,7 +74,9 @@
 ;removes a layer of scope from state
 (define stateEnd
     (lambda (state)
-      (cdr state)));normal case
+        (if (list? state)
+            (cdr state);normal case
+            state)));if program has ended, and you are returning a value
   
 ;Primary doing stuff
 ;converts #t and #f to 'true and 'false respectively
@@ -92,12 +87,10 @@
 	 ((eq? a #f) 'false)
 	 (else a))))
 (define interpreter
-    (lambda (parsetree state return-c break-c continue-c throw-c normal-c)
+    (lambda (parsetree state return-c)
         (cond
          ((null? parsetree) state) ;if you're at the end of your parsetree and haven't returned, return the full current state
-         (else (Mstate (car parsetree) state return-c break-c continue-c throw-c
-                       (lambda (v)
-                         (interpreter (cdr parsetree) v return-c break-c continue-c throw-c normal-c)))))))
+	 (else (interpreter (cdr parsetree) (Mstate (car parsetree) state return-c) return-c)))))
 
 (define operator car)
 (define operand1 cadr)
@@ -107,20 +100,15 @@
     (if (null? (cddr l)) '() (operand2 l))))
 
 (define Mstate
-    (lambda (statement state return-c break-c continue-c throw-c normal-c)
+    (lambda (statement state return-c)
         (cond
-         ((eq? (operator statement) 'begin) (normal-c (interpreter (cdr statement) (stateBegin state) return-c
-                                                         (lambda (v) (break-c (stateEnd v)))
-                                                         (lambda (v) (continue-c (stateEnd v)))
-                                                         (lambda (v) (throw-c (stateEnd v)))
-                                                         (lambda (v) (normal-c (stateEnd v))))))
+         ((eq? (operator statement) 'begin) (stateEnd (interpreter (cdr statement) (stateBegin state) return-c)))
 	 ((eq? (operator statement) 'return) (return-c (Mvalue (cadr statement) state)))
-	 ((eq? (operator statement) 'var) (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
-	 ((eq? (operator statement) '=) (normal-c (setVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
-	 ((eq? (operator statement) 'if) (normal-c (Mstate_if (cadr statement) (cddr statement) state return-c break-c continue-c throw-c normal-c))) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
-         ;"This is going to be such a mindf*ck" -Prince Nebulon
-	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state return-c normal-c continue-c throw-c normal-c))
-	 (else (normal-c state))
+	 ((eq? (operator statement) 'var) (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state))
+	 ((eq? (operator statement) '=) (setVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state))
+	 ((eq? (operator statement) 'if) (Mstate_if (cadr statement) (cddr statement) state return-c)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
+	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state return-c))
+	 (else state)
 	 )))
 
 (define Mboolean
@@ -160,20 +148,17 @@
      )))
 
 (define Mstate_while
-    (lambda (condition statement state return-c break-c continue-c throw-c normal-c)
+    (lambda (condition statement state return-c)
         (if (Mboolean condition state)
-            (Mstate statement state return-c break-c
-                    (lambda (v) (Mstate_while condition statement v return-c break-c continue-c throw-c normal-c));Continue
-                    throw-c
-                    (lambda (v) (Mstate_while condition statement v return-c break-c continue-c throw-c normal-c)))
-            (normal-c state))))
+            (Mstate_while condition statement (Mstate statement state return-c) return-c)
+            state)))
 
 (define Mstate_if
-    (lambda (condition statements state return-c break-c continue-c throw-c normal-c)
+    (lambda (condition statements state return-c)
         (if (Mboolean condition state)
-            (Mstate (car statements) state return-c break-c continue-c throw-c normal-c)
+            (Mstate (car statements) state return-c)
             (if (pair? (cdr statements));Else
-                (Mstate (cadr statements) state return-c break-c continue-c throw-c normal-c)
+                (Mstate (cadr statements) state return-c)
                 state))))
 
 (interpret "test")
