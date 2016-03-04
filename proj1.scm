@@ -200,11 +200,11 @@
     (let* ((execute-finally
             (lambda(v) (if (null? finally)
                            (normal-c v) ;No finally.
-                           (interpreter (cadr finally) v return-c break-c continue-c throw-c normal-c))))
+                           (interpret_in_new_layer (cadr finally) v return-c break-c continue-c throw-c normal-c))))
            (execute-catch
             (lambda(v thrown) (if (null? catch)
                            (execute-finally v)
-                           (interpreter (caddr catch) (addVar (caadr catch) thrown v) return-c break-c continue-c throw-c execute-finally)))))
+                           (interpret_in_new_layer (caddr catch) (addVar (caadr catch) (Mvalue thrown v) v) return-c break-c continue-c throw-c execute-finally)))))
       (interpret_in_new_layer tryBody state return-c break-c continue-c execute-catch execute-finally))))
                            
 
