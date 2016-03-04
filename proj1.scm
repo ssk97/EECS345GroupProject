@@ -23,7 +23,7 @@
 	 ((eq? a #f) 'false)
 	 (else a))))
 
-;dealing with variables
+;code for dealing with states/variables
 
 ;state is a list of substates
 ;a substate is a list of pairs with the same scope
@@ -96,8 +96,9 @@
     (lambda (state)
       (cdr state)))
   
-
-;interpreter code
+;end of code for dealing with states/variables
+  
+;interprets code in parsetree
 (define interpreter
     (lambda (parsetree state return-c break-c continue-c throw-c normal-c)
         (cond
@@ -106,11 +107,12 @@
                        (lambda (v)
                          (interpreter (cdr parsetree) v return-c break-c continue-c throw-c normal-c)))))))
 
-;Adds a new layer onto the state, interprets statements, and adds a stateEnd to all of the continuations
+;Interprets statements, and adds a stateEnd to all of the continuations
 ;except for the return continuation, since we don't care about the state after that.
+;requires the calling function to call stateBegin on the state first (this is so that Catch can add the thrown value onto the stack)
 (define interpret_in_new_layer
   (lambda (statements state return-c break-c continue-c throw-c normal-c)
-    (interpreter statements (stateBegin state) return-c
+    (interpreter statements state return-c
                  (lambda (v) (break-c (stateEnd v)))
                  (lambda (v) (continue-c (stateEnd v)))
                  (lambda (v v2) (throw-c (stateEnd v) v2))
@@ -128,7 +130,7 @@
 (define Mstate
     (lambda (statement state return-c break-c continue-c throw-c normal-c)
         (cond
-         ((eq? (operator statement) 'begin) (interpret_in_new_layer (cdr statement) state return-c  break-c continue-c throw-c normal-c))
+         ((eq? (operator statement) 'begin) (interpret_in_new_layer (cdr statement) (stateBegin state) return-c  break-c continue-c throw-c normal-c))
 	 ((eq? (operator statement) 'return) (return-c (Mvalue (operand1 statement) state)))
 	 ((eq? (operator statement) 'var) (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
 	 ((eq? (operator statement) '=) (normal-c (setVar (operand1 statement) (Mvalue (operand2 statement) state) state)))
@@ -203,12 +205,12 @@
     (let* ((execute-finally
             (lambda(v) (if (null? finally)
                            (normal-c v) ;No finally, just continue execution
-                           (interpret_in_new_layer (cadr finally) v return-c break-c continue-c throw-c normal-c))))
+                           (interpret_in_new_layer (cadr finally) (stateBegin v) return-c break-c continue-c throw-c normal-c))))
            (execute-catch
             (lambda(v thrown) (if (null? catch)
                            (execute-finally v) ;no catch, just go straight to finally
-                           (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown v) return-c break-c continue-c throw-c execute-finally)))))
-      (interpret_in_new_layer tryBody state return-c break-c continue-c execute-catch execute-finally))))
+                           (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) return-c break-c continue-c throw-c execute-finally)))))
+      (interpret_in_new_layer tryBody (stateBegin state) return-c break-c continue-c execute-catch execute-finally))));try block
                            
 
 (interpret "test");run the code
