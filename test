@@ -7,7 +7,7 @@ try {
   x = x + 5;
 }
 catch(e) {
-  return x;
+  x=x+1;
 }
 finally {
   x = x + 100;

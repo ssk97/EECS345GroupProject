@@ -106,7 +106,8 @@
                        (lambda (v)
                          (interpreter (cdr parsetree) v return-c break-c continue-c throw-c normal-c)))))))
 
-
+;Adds a new layer onto the state, interprets statements, and adds a stateEnd to all of the continuations
+;except for the return continuation, since we don't care about the state after that.
 (define interpret_in_new_layer
   (lambda (statements state return-c break-c continue-c throw-c normal-c)
     (interpreter statements (stateBegin state) return-c
@@ -127,11 +128,10 @@
     (lambda (statement state return-c break-c continue-c throw-c normal-c)
         (cond
          ((eq? (operator statement) 'begin) (interpret_in_new_layer (cdr statement) state return-c  break-c continue-c throw-c normal-c))
-	 ((eq? (operator statement) 'return) (return-c (Mvalue (cadr statement) state)))
+	 ((eq? (operator statement) 'return) (return-c (Mvalue (operand1 statement) state)))
 	 ((eq? (operator statement) 'var) (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
-	 ((eq? (operator statement) '=) (normal-c (setVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
-	 ((eq? (operator statement) 'if) (Mstate_if (cadr statement) (cddr statement) state return-c break-c continue-c throw-c normal-c)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
-         ;"This is going to be such a mindf*ck" -Prince Nebulon
+	 ((eq? (operator statement) '=) (normal-c (setVar (operand1 statement) (Mvalue (operand2 statement) state) state)))
+	 ((eq? (operator statement) 'if) (Mstate_if (operand1 statement) (cddr statement) state return-c break-c continue-c throw-c normal-c)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
 	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state return-c normal-c continue-c throw-c normal-c))
          ((eq? (operator statement) 'try) (Mstate_try (operand1 statement) (operand2 statement) (operand3 statement) state return-c break-c continue-c throw-c normal-c))
          ((eq? (operator statement) 'throw) (throw-c state (Mvalue (operand1 statement) state)))
