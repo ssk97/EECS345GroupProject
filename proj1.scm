@@ -13,7 +13,7 @@
          (lambda(x)(error "Break not in loop.")) ;Break
          (lambda(x)(error "Continue not in loop.")) ;Continue
          (lambda(x y)(error "Throw not in try")) ;Throw
-         (lambda (v) v))))))) ;Normal exit.  Ejects the whole state.
+         (lambda(v) v))))))) ;Exits without return, provide whole state for debugging
 
 ;converts #t and #f to 'true and 'false respectively
 (define outputNice 
@@ -96,8 +96,8 @@
     (lambda (state)
       (cdr state)))
   
-;Primary doing stuff
 
+;interpreter code
 (define interpreter
     (lambda (parsetree state return-c break-c continue-c throw-c normal-c)
         (cond
@@ -124,6 +124,7 @@
   (lambda (l)
     (if (null? (cddr l)) '() (operand2 l))))
 
+;returns the new state after evaluating statement
 (define Mstate
     (lambda (statement state return-c break-c continue-c throw-c normal-c)
         (cond
@@ -140,6 +141,7 @@
 	 (else (normal-c state))
 	 )))
 
+;returns the boolean value of statement
 (define Mboolean
     (lambda (statement state)
         (cond
@@ -158,6 +160,7 @@
 	 ((eq? (operator statement) '!) (not (Mboolean (operand1 statement) state)))
 	 )))
 
+;returns the value of expr
 (define Mvalue
   (lambda (expr state)
     (cond
@@ -176,36 +179,36 @@
      (else (Mboolean expr state))
      )))
 
+;helper function for while loops
 (define Mstate_while
     (lambda (condition statement state return-c break-c continue-c throw-c normal-c)
         (if (Mboolean condition state)
             (Mstate statement state return-c break-c
-                    (lambda (v) (Mstate_while condition statement v return-c break-c continue-c throw-c normal-c));Continue
+                    (lambda (v) (Mstate_while condition statement v return-c break-c continue-c throw-c normal-c));Continue loop
                     throw-c
-                    (lambda (v) (Mstate_while condition statement v return-c break-c continue-c throw-c normal-c)))
-            (normal-c state))))
-
+                    (lambda (v) (Mstate_while condition statement v return-c break-c continue-c throw-c normal-c)));normally continue loop
+            (normal-c state))));end of loop
+;helper function for if conditions (possible else)
+;statements is a list that is either 1 long (if only) or 2 long (if, else)
 (define Mstate_if
     (lambda (condition statements state return-c break-c continue-c throw-c normal-c)
         (if (Mboolean condition state)
             (Mstate (car statements) state return-c break-c continue-c throw-c normal-c)
-            (if (pair? (cdr statements));Else
+            (if (pair? (cdr statements));Else is a pair
                 (Mstate (cadr statements) state return-c break-c continue-c throw-c normal-c)
-                (normal-c state)))))
-
-    
-
+                (normal-c state)))));if no else, just return the state
+;helper function for try-catch block
 (define Mstate_try
   (lambda (tryBody catch finally state return-c break-c continue-c throw-c normal-c)
     (let* ((execute-finally
             (lambda(v) (if (null? finally)
-                           (normal-c v) ;No finally.
+                           (normal-c v) ;No finally, just continue execution
                            (interpret_in_new_layer (cadr finally) v return-c break-c continue-c throw-c normal-c))))
            (execute-catch
             (lambda(v thrown) (if (null? catch)
-                           (execute-finally v)
+                           (execute-finally v) ;no catch, just go straight to finally
                            (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown v) return-c break-c continue-c throw-c execute-finally)))))
       (interpret_in_new_layer tryBody state return-c break-c continue-c execute-catch execute-finally))))
                            
 
-(interpret "test")
+(interpret "test");run the code
