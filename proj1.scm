@@ -109,7 +109,7 @@
 
 (define interpret_in_new_layer
   (lambda (statements state return-c break-c continue-c throw-c normal-c)
-    (interpreter statements state return-c
+    (interpreter statements (stateBegin state) return-c
                  (lambda (v) (break-c (stateEnd v)))
                  (lambda (v) (continue-c (stateEnd v)))
                  (lambda (v v2) (throw-c (stateEnd v) v2))
@@ -126,7 +126,7 @@
 (define Mstate
     (lambda (statement state return-c break-c continue-c throw-c normal-c)
         (cond
-         ((eq? (operator statement) 'begin) (interpret_in_new_layer (cdr statement) (stateBegin state) return-c  break-c continue-c throw-c normal-c))
+         ((eq? (operator statement) 'begin) (interpret_in_new_layer (cdr statement) state return-c  break-c continue-c throw-c normal-c))
 	 ((eq? (operator statement) 'return) (return-c (Mvalue (cadr statement) state)))
 	 ((eq? (operator statement) 'var) (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
 	 ((eq? (operator statement) '=) (normal-c (setVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
@@ -204,8 +204,8 @@
            (execute-catch
             (lambda(v thrown) (if (null? catch)
                            (execute-finally v)
-                           (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) return-c break-c continue-c throw-c execute-finally)))))
-      (interpreter tryBody state return-c break-c continue-c execute-catch execute-finally))))
+                           (interpreter (caddr catch) (addVar (caadr catch) thrown v) return-c break-c continue-c throw-c execute-finally)))))
+      (interpret_in_new_layer tryBody state return-c break-c continue-c execute-catch execute-finally))))
                            
 
 (interpret "test")
