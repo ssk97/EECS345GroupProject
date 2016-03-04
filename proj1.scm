@@ -134,7 +134,7 @@
          ;"This is going to be such a mindf*ck" -Prince Nebulon
 	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state return-c normal-c continue-c throw-c normal-c))
          ((eq? (operator statement) 'try) (Mstate_try (operand1 statement) (operand2 statement) (operand3 statement) state return-c break-c continue-c throw-c normal-c))
-         ((eq? (operator statement) 'throw) (throw-c state (operand1 statement)))
+         ((eq? (operator statement) 'throw) (throw-c state (Mvalue (operand1 statement) state)))
          ((eq? (operator statement) 'continue) (continue-c state))
          ((eq? (operator statement) 'break) (break-c state))
 	 (else (normal-c state))
@@ -204,7 +204,7 @@
            (execute-catch
             (lambda(v thrown) (if (null? catch)
                            (execute-finally v)
-                           (interpret_in_new_layer (caddr catch) (addVar (caadr catch) (Mvalue thrown v) v) return-c break-c continue-c throw-c execute-finally)))))
+                           (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown v) return-c break-c continue-c throw-c execute-finally)))))
       (interpret_in_new_layer tryBody state return-c break-c continue-c execute-catch execute-finally))))
                            
 
