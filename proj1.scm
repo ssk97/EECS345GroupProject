@@ -106,6 +106,15 @@
                        (lambda (v)
                          (interpreter (cdr parsetree) v return-c break-c continue-c throw-c normal-c)))))))
 
+
+(define interpret_in_new_layer
+  (lambda (statements state return-c break-c continue-c throw-c normal-c)
+    (interpreter statements state return-c
+                 (lambda (v) (break-c (stateEnd v)))
+                 (lambda (v) (continue-c (stateEnd v)))
+                 (lambda (v v2) (throw-c (stateEnd v) v2))
+                 (lambda (v) (normal-c (stateEnd v))))))
+
 (define operator car)
 (define operand1 cadr)
 (define operand2 caddr)
@@ -117,11 +126,7 @@
 (define Mstate
     (lambda (statement state return-c break-c continue-c throw-c normal-c)
         (cond
-         ((eq? (operator statement) 'begin) (normal-c (interpreter (cdr statement) (stateBegin state) return-c
-                                                         (lambda (v) (break-c (stateEnd v)))
-                                                         (lambda (v) (continue-c (stateEnd v)))
-                                                         (lambda (v v2) (throw-c (stateEnd v) v2))
-                                                         (lambda (v) (normal-c (stateEnd v))))))
+         ((eq? (operator statement) 'begin) (interpret_in_new_layer (cdr statement) (stateBegin state) return-c  break-c continue-c throw-c normal-c))
 	 ((eq? (operator statement) 'return) (return-c (Mvalue (cadr statement) state)))
 	 ((eq? (operator statement) 'var) (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
 	 ((eq? (operator statement) '=) (normal-c (setVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
@@ -188,6 +193,8 @@
                 (Mstate (cadr statements) state return-c break-c continue-c throw-c normal-c)
                 (normal-c state)))))
 
+    
+
 (define Mstate_try
   (lambda (tryBody catch finally state return-c break-c continue-c throw-c normal-c)
     (let* ((execute-finally
@@ -197,11 +204,7 @@
            (execute-catch
             (lambda(v thrown) (if (null? catch)
                            (execute-finally v)
-                           (interpreter (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) return-c ;Yes, the thrown exception gets its own motherfucking layer.  Otherwise, how would catch (e) return e; work?
-                                        (lambda (v) (break-c (stateEnd v))) ;So we reimplement what begin does here.
-                                        (lambda (v) (continue-c (stateEnd v)))
-                                        (lambda (v1 v2) (throw-c (stateEnd v1) v2)) ;This will only execute if you throw inside a catch.  MY brain hurts.
-                                        (lambda (v) (execute-finally (stateEnd v))))))))
+                           (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) return-c break-c continue-c throw-c execute-finally)))))
       (interpreter tryBody state return-c break-c continue-c execute-catch execute-finally))))
                            
 
