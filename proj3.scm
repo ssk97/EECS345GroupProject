@@ -100,7 +100,9 @@
       (cdr state)))
   
 ;end of code for dealing with states/variables
-  
+
+
+
 ;interprets code in parsetree
 (define interpreter
     (lambda (parsetree state return-c break-c continue-c throw-c normal-c)
@@ -134,12 +136,16 @@
   (lambda (name args fn state)
     (addVar name (list args state fn) state)))
 ;returns a substate containing all of the args using state
+;TODO- allow for by-reference/box rather than by-value passing.
 (define evalArgs (lambda (args argvals state)
   (cond
     ((and (null? args) (null? argvals)) '())
     ((or (null? args) (null? argvals)) (error "Argument count does not match function definition"))
     (else (addVar_sub (car args) (Mvalue (car argvals) state) (evalArgs (cdr args) (cdr argvals) state))))
   ))
+;Call a function.
+;Create a new state from the state saved inside the function, and add the function itself to that state
+;TODO- needs to have throw-c properly handled.
 (define call_function
   (lambda (name args state)
     (let ([func (findVar name state)])
@@ -172,7 +178,7 @@
       (else (normal-c state))
     )))
 
-;returns the boolean value of statement (or unknown result that return be a boolean)
+;returns the boolean value of statement (or unknown value that could return a boolean)
 (define Mboolean
   (lambda (statement state)
     (cond
@@ -181,14 +187,14 @@
       ((symbol? statement) (findVar statement state));variable
       ((eq? (operator statement) '==) (eq? (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
       ((eq? (operator statement) '!=) (not (eq? (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state))))
-      ((eq? (operator statement) '>) (> (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
-      ((eq? (operator statement) '<) (< (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
+      ((eq? (operator statement) '>)  (> (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
+      ((eq? (operator statement) '<)  (< (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
       ((eq? (operator statement) '>=) (>= (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
       ((eq? (operator statement) '<=) (<= (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
 
       ((eq? (operator statement) '&&) (and (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
       ((eq? (operator statement) '||) (or (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
-      ((eq? (operator statement) '!) (not (Mboolean (operand1 statement) state)))
+      ((eq? (operator statement) '!)  (not (Mboolean (operand1 statement) state)))
       ((eq? (operator statement) 'funcall)  (call_function (operand1 statement) (cddr statement) state))
       ((eq? (operator statement) '=)        (setVar (operand1 statement) (Mvalue (operand2 statement) state) state))
       (else (error "Value/Boolean unable to be evaluated"))
@@ -245,4 +251,4 @@
       (interpret_in_new_layer tryBody (stateBegin state) return-c break-c continue-c execute-catch execute-finally))));try block
                            
 
-;(interpret "test");run the code
+(interpret "test");run the code
