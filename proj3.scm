@@ -44,12 +44,12 @@
 	(error "Variable declared multiple times.")
         (cons (cons varname (box value)) substate))))
 ;modifies the value of the box in substate
-;returns void or errors out
+;returns the value set to or errors out
 (define setVar_sub
     (lambda (varname value substate)
 	(cond
 	 ((null? substate) (error "Variable assigned before declared- setVar_sub"))
-	 ((eq? varname (caar substate)) (set-box! (cdar substate) value))
+	 ((eq? varname (caar substate)) (begin (set-box! (cdar substate) value) value))
 	 (else (setVar_sub varname value (cdr substate))))))
 ;Returns the value associated with varname in substate
 (define findVar_sub
@@ -76,16 +76,13 @@
         (cons (addVar_sub varname value (car state)) (cdr state))))
 ;modifies the boxes such that varname is set to value
 ;Takes a name, value, and state to modify
-;returns state on success, errors out on failure
+;returns the value it set to on success, errors out on failure
 (define setVar
     (lambda (varname value state)
         (cond
             ((null? state) (error "Variable used before declared- setVar"))
-            ((varExists_sub varname (car state))
-              (begin
-                (setVar_sub varname value (car state))
-                state))
-            (else (cons (car state) (setVar varname value (cdr state)))))))
+            ((varExists_sub varname (car state)) (setVar_sub varname value (car state)))
+            (else (setVar varname value (cdr state))))))
 ;returns the variable varname
 (define findVar
     (lambda (varname state)
@@ -163,7 +160,7 @@
       ((eq? (operator statement) 'begin)    (interpret_in_new_layer (cdr statement) (stateBegin state) return-c  break-c continue-c throw-c normal-c))
       ((eq? (operator statement) 'return)   (return-c (Mvalue (operand1 statement) state)))
       ((eq? (operator statement) 'var)      (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
-      ((eq? (operator statement) '=)        (normal-c (setVar (operand1 statement) (Mvalue (operand2 statement) state) state)))
+      ((eq? (operator statement) '=)        (begin (setVar (operand1 statement) (Mvalue (operand2 statement) state) state) (normal-c state)))
       ((eq? (operator statement) 'if)       (Mstate_if (operand1 statement) (cddr statement) state return-c break-c continue-c throw-c normal-c)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
       ((eq? (operator statement) 'while)    (Mstate_while (operand1 statement) (operand2 statement) state return-c normal-c continue-c throw-c normal-c))
       ((eq? (operator statement) 'try)      (Mstate_try (operand1 statement) (operand2 statement) (operand3 statement) state return-c break-c continue-c throw-c normal-c))
@@ -171,11 +168,11 @@
       ((eq? (operator statement) 'continue) (continue-c state))
       ((eq? (operator statement) 'break)    (break-c state))
       ((eq? (operator statement) 'function) (normal-c (define_function (operand1 statement) (operand2 statement) (operand3 statement) state)))
-      ((eq? (operator statement) 'funcall)  (begin (call_function (operand1 statement) (cddr statement) state)) (normal-c state))
+      ((eq? (operator statement) 'funcall)  (begin (call_function (operand1 statement) (cddr statement) state) (normal-c state)))
       (else (normal-c state))
     )))
 
-;returns the boolean value of statement
+;returns the boolean value of statement (or unknown result that return be a boolean)
 (define Mboolean
   (lambda (statement state)
     (cond
@@ -193,6 +190,7 @@
       ((eq? (operator statement) '||) (or (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
       ((eq? (operator statement) '!) (not (Mboolean (operand1 statement) state)))
       ((eq? (operator statement) 'funcall)  (call_function (operand1 statement) (cddr statement) state))
+      ((eq? (operator statement) '=)        (setVar (operand1 statement) (Mvalue (operand2 statement) state) state))
       (else (error "Value/Boolean unable to be evaluated"))
     )))
 
