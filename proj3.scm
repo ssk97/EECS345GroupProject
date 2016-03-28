@@ -1,5 +1,5 @@
 ;Ron Weber and Steven Knipe
-(load "simpleParser.scm")
+(load "functionParser.scm")
 
 (define interpret
   (lambda (filename)
@@ -114,12 +114,12 @@
 ;except for the return continuation, since we don't care about the state after that.
 ;requires the calling function to call stateBegin on the state first (this is so that Catch can add the thrown value onto the stack)
 (define interpret_in_new_layer
-  (lambda (statements state return-c break-c continue-c throw-c normal-c)
-    (interpreter statements state return-c
-                 (lambda (v) (break-c (stateEnd v)))
-                 (lambda (v) (continue-c (stateEnd v)))
-                 (lambda (v v2) (throw-c (stateEnd v) v2))
-                 (lambda (v) (normal-c (stateEnd v))))))
+    (lambda (statements state return-c break-c continue-c throw-c normal-c)
+        (interpreter statements state return-c
+            (lambda (v) (break-c (stateEnd v)))
+            (lambda (v) (continue-c (stateEnd v)))
+            (lambda (v v2) (throw-c (stateEnd v) v2))
+            (lambda (v) (normal-c (stateEnd v))))))
 
 (define operator car)
 (define operand1 cadr)
@@ -129,41 +129,59 @@
   (lambda (l)
     (if (null? (cddr l)) '() (operand2 l))))
 
+(define define_function
+  (lambda (name args fn state)
+    (addVar name (list args state fn))))
+;function format: (args, state, function)
+(define call_function
+  (lambda (name args state)
+    (let ([func (findVar name state)])
+      (interpreter
+        (caddr func);function
+        (cadr func);state
+        return-c ;Where return goes
+        (lambda(x)(error "Break not in loop.")) ;Break
+        (lambda(x)(error "Continue not in loop.")) ;Continue
+        (lambda(x y)(error "Throw not in try")) ;Throw
+        (lambda(v) v))))))) ;Exits without return, provide whole state for debugging
+
 ;returns the new state after evaluating statement
 (define Mstate
-    (lambda (statement state return-c break-c continue-c throw-c normal-c)
-        (cond
-         ((eq? (operator statement) 'begin) (interpret_in_new_layer (cdr statement) (stateBegin state) return-c  break-c continue-c throw-c normal-c))
-	 ((eq? (operator statement) 'return) (return-c (Mvalue (operand1 statement) state)))
-	 ((eq? (operator statement) 'var) (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
-	 ((eq? (operator statement) '=) (normal-c (setVar (operand1 statement) (Mvalue (operand2 statement) state) state)))
-	 ((eq? (operator statement) 'if) (Mstate_if (operand1 statement) (cddr statement) state return-c break-c continue-c throw-c normal-c)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
-	 ((eq? (operator statement) 'while) (Mstate_while (operand1 statement) (operand2 statement) state return-c normal-c continue-c throw-c normal-c))
-         ((eq? (operator statement) 'try) (Mstate_try (operand1 statement) (operand2 statement) (operand3 statement) state return-c break-c continue-c throw-c normal-c))
-         ((eq? (operator statement) 'throw) (throw-c state (Mvalue (operand1 statement) state)))
-         ((eq? (operator statement) 'continue) (continue-c state))
-         ((eq? (operator statement) 'break) (break-c state))
-	 (else (normal-c state))
-	 )))
+  (lambda (statement state return-c break-c continue-c throw-c normal-c)
+    (cond
+      ((eq? (operator statement) 'begin)    (interpret_in_new_layer (cdr statement) (stateBegin state) return-c  break-c continue-c throw-c normal-c))
+      ((eq? (operator statement) 'return)   (return-c (Mvalue (operand1 statement) state)))
+      ((eq? (operator statement) 'var)      (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
+      ((eq? (operator statement) '=)        (normal-c (setVar (operand1 statement) (Mvalue (operand2 statement) state) state)))
+      ((eq? (operator statement) 'if)       (Mstate_if (operand1 statement) (cddr statement) state return-c break-c continue-c throw-c normal-c)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
+      ((eq? (operator statement) 'while)    (Mstate_while (operand1 statement) (operand2 statement) state return-c normal-c continue-c throw-c normal-c))
+      ((eq? (operator statement) 'try)      (Mstate_try (operand1 statement) (operand2 statement) (operand3 statement) state return-c break-c continue-c throw-c normal-c))
+      ((eq? (operator statement) 'throw)    (throw-c state (Mvalue (operand1 statement) state)))
+      ((eq? (operator statement) 'continue) (continue-c state))
+      ((eq? (operator statement) 'break)    (break-c state))
+      ((eq? (operator statement) 'function) (normal-c (define_function (operand1 statement) (operand2 statement) (operand3 statement) state)))
+      ((eq? (operator statement) 'funcall)  (normal-c (call_function (operand1 statement) (cddr statement) state)))
+      (else (normal-c state))
+    )))
 
 ;returns the boolean value of statement
 (define Mboolean
-    (lambda (statement state)
-        (cond
-	 ((eq? statement 'true) #t)
-	 ((eq? statement 'false) #f)
-	 ((symbol? statement) (findVar statement state));variable
-	 ((eq? (operator statement) '==) (eq? (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
-	 ((eq? (operator statement) '!=) (not (eq? (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state))))
-	 ((eq? (operator statement) '>) (> (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
-	 ((eq? (operator statement) '<) (< (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
-	 ((eq? (operator statement) '>=) (>= (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
-	 ((eq? (operator statement) '<=) (<= (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
-	 
-	 ((eq? (operator statement) '&&) (and (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
-	 ((eq? (operator statement) '||) (or (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
-	 ((eq? (operator statement) '!) (not (Mboolean (operand1 statement) state)))
-	 )))
+  (lambda (statement state)
+    (cond
+      ((eq? statement 'true) #t)
+      ((eq? statement 'false) #f)
+      ((symbol? statement) (findVar statement state));variable
+      ((eq? (operator statement) '==) (eq? (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
+      ((eq? (operator statement) '!=) (not (eq? (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state))))
+      ((eq? (operator statement) '>) (> (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
+      ((eq? (operator statement) '<) (< (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
+      ((eq? (operator statement) '>=) (>= (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
+      ((eq? (operator statement) '<=) (<= (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
+
+      ((eq? (operator statement) '&&) (and (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
+      ((eq? (operator statement) '||) (or (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
+      ((eq? (operator statement) '!) (not (Mboolean (operand1 statement) state)))
+    )))
 
 ;returns the value of expr
 (define Mvalue
@@ -206,14 +224,14 @@
 (define Mstate_try
   (lambda (tryBody catch finally state return-c break-c continue-c throw-c normal-c)
     (let* ((execute-finally
-            (lambda(v) (if (null? finally)
-                           (normal-c v) ;No finally, just continue execution
-                           (interpret_in_new_layer (cadr finally) (stateBegin v) return-c break-c continue-c throw-c normal-c))))
-           (execute-catch
-            (lambda(v thrown) (if (null? catch)
-                           (execute-finally v) ;no catch, just go straight to finally
-                           (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) return-c break-c continue-c throw-c execute-finally)))))
+      (lambda(v) (if (null? finally)
+                     (normal-c v) ;No finally, just continue execution
+                     (interpret_in_new_layer (cadr finally) (stateBegin v) return-c break-c continue-c throw-c normal-c))))
+     (execute-catch
+      (lambda(v thrown) (if (null? catch)
+                     (execute-finally v) ;no catch, just go straight to finally
+                     (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) return-c break-c continue-c throw-c execute-finally)))))
       (interpret_in_new_layer tryBody (stateBegin state) return-c break-c continue-c execute-catch execute-finally))));try block
                            
 
-(interpret "test");run the code
+;(interpret "test");run the code
