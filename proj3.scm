@@ -3,8 +3,7 @@
 
 (define interpret
   (lambda (filename)
-    (outputNice
-     (call/cc
+    (outputNice (call_function 'main () (call/cc
       (lambda (return-c)
         (interpreter
          (parser filename)
@@ -13,7 +12,7 @@
          (lambda(x)(error "Break not in loop.")) ;Break
          (lambda(x)(error "Continue not in loop.")) ;Continue
          (lambda(x y)(error "Throw not in try")) ;Throw
-         (lambda(v) v))))))) ;Exits without return, provide whole state for debugging
+         (lambda(v) v))))))));Exits without return, provide whole state for debugging
 
 ;converts #t and #f to 'true and 'false respectively
 (define outputNice 
@@ -71,18 +70,22 @@
             (else (varExists varname (cdr state))))))
 ;Adds varname to the topmost substate
 ;Takes a name, value, and state
+;returns the new state
 (define addVar
     (lambda (varname value state)
         (cons (addVar_sub varname value (car state)) (cdr state))))
 ;modifies the boxes such that varname is set to value
 ;Takes a name, value, and state to modify
-;returns void on success, errors out on failure
+;returns state on success, errors out on failure
 (define setVar
     (lambda (varname value state)
         (cond
             ((null? state) (error "Variable used before declared- setVar"))
-            ((varExists_sub varname (car state)) ((setVar_sub varname value (car state))))
-            (else (setVar varname value (cdr state))))))
+            ((varExists_sub varname (car state))
+              (begin
+                (setVar_sub varname value (car state))
+                state))
+            (else (cons (car state) (setVar varname value (cdr state)))))))
 ;returns the variable varname
 (define findVar
     (lambda (varname state)
@@ -129,22 +132,30 @@
   (lambda (l)
     (if (null? (cddr l)) '() (operand2 l))))
 
+;function format: (args, state, function)
 (define define_function
   (lambda (name args fn state)
-    (addVar name (list args state fn))))
-;function format: (args, state, function)
+    (addVar name (list args state fn) state)))
+;returns a substate containing all of the args using state
+(define evalArgs (lambda (args argvals state)
+  (cond
+    ((and (null? args) (null? argvals)) '())
+    ((or (null? args) (null? argvals)) (error "Argument count does not match function definition"))
+    (else (addVar_sub (car args) (Mvalue (car argvals) state) (evalArgs (cdr args) (cdr argvals) state))))
+  ))
 (define call_function
   (lambda (name args state)
     (let ([func (findVar name state)])
-      (interpreter
-        (caddr func);function
-        (cadr func);state
-        return-c ;Where return goes
-        (lambda(x)(error "Break not in loop.")) ;Break
-        (lambda(x)(error "Continue not in loop.")) ;Continue
-        (lambda(x y)(error "Throw not in try")) ;Throw
-        (lambda(v) v))))))) ;Exits without return, provide whole state for debugging
-
+     (call/cc
+      (lambda (return-c)
+        (interpreter
+          (caddr func);function
+          (cons (addVar_sub name func (evalArgs (car func) args state)) (cadr func));new state, plus recursion opportunity
+          return-c ;Where return goes
+          (lambda(x)(error "Break not in loop.")) ;Break
+          (lambda(x)(error "Continue not in loop.")) ;Continue
+          (lambda(x y)(error "Throw not in try")) ;Throw
+          (lambda(v) v))))))) ;Exits without return, provide whole state for debugging
 ;returns the new state after evaluating statement
 (define Mstate
   (lambda (statement state return-c break-c continue-c throw-c normal-c)
@@ -160,7 +171,7 @@
       ((eq? (operator statement) 'continue) (continue-c state))
       ((eq? (operator statement) 'break)    (break-c state))
       ((eq? (operator statement) 'function) (normal-c (define_function (operand1 statement) (operand2 statement) (operand3 statement) state)))
-      ((eq? (operator statement) 'funcall)  (normal-c (call_function (operand1 statement) (cddr statement) state)))
+      ((eq? (operator statement) 'funcall)  (begin (call_function (operand1 statement) (cddr statement) state)) (normal-c state))
       (else (normal-c state))
     )))
 
@@ -181,6 +192,8 @@
       ((eq? (operator statement) '&&) (and (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
       ((eq? (operator statement) '||) (or (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
       ((eq? (operator statement) '!) (not (Mboolean (operand1 statement) state)))
+      ((eq? (operator statement) 'funcall)  (call_function (operand1 statement) (cddr statement) state))
+      (else (error "Value/Boolean unable to be evaluated"))
     )))
 
 ;returns the value of expr
