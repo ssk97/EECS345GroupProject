@@ -12,7 +12,9 @@
          (lambda(x)(error "Break not in loop.")) ;Break
          (lambda(x)(error "Continue not in loop.")) ;Continue
          (lambda(x y)(error "Throw not in try")) ;Throw
-         (lambda(v) v))))))));Exits without return, provide whole state for debugging
+         (lambda(v) v))));Exits without return, provide whole state for debugging
+                               (lambda (x y) (error "Attempt to call main() threw exception")) ;This should never be needed, as it's only used if evaluating arguments throws an exception.
+                               ))))
 
 ;converts #t and #f to 'true and 'false respectively
 (define outputNice 
@@ -132,97 +134,102 @@
     (if (null? (cddr l)) '() (operand2 l))))
 
 ;function format: (args, state, function)
+; args = list of names of arguments, state = Everything the function has access to except itself, function = The parse tree of the function.
 (define define_function
   (lambda (name args fn state)
     (addVar name (list args state fn) state)))
 ;returns a substate containing all of the args using state
 ;TODO- allow for by-reference/box rather than by-value passing.
-(define evalArgs (lambda (args argvals state)
+;Throw-c needed for function chaining if one of the arguments throws. 
+(define evalArgs (lambda (args argvals state throw-c)
   (cond
     ((and (null? args) (null? argvals)) '())
     ((or (null? args) (null? argvals)) (error "Argument count does not match function definition"))
-    (else (addVar_sub (car args) (Mvalue (car argvals) state) (evalArgs (cdr args) (cdr argvals) state))))
+    (else (addVar_sub (car args) (Mvalue (car argvals) state throw-c) (evalArgs (cdr args) (cdr argvals) state throw-c))))
   ))
 ;Call a function.
 ;Create a new state from the state saved inside the function, and add the function itself to that state
-;TODO- needs to have throw-c properly handled.
+;name = Name of the function; args = A list of the variables sent as arguments to this function call; state = The state as the function is called; Throw-c = where to go when this function throws,
 (define call_function
-  (lambda (name args state)
+  (lambda (name args state throw-c)
     (let ([func (findVar name state)])
      (call/cc
       (lambda (return-c)
         (interpreter
           (caddr func);function
-          (cons (addVar_sub name func (evalArgs (car func) args state)) (cadr func));new state, plus recursion opportunity
+          (cons (addVar_sub name func (evalArgs (car func) args state throw-c)) (cadr func));new state, plus recursion opportunity
           return-c ;Where return goes
           (lambda(x)(error "Break not in loop.")) ;Break
           (lambda(x)(error "Continue not in loop.")) ;Continue
-          (lambda(x y)(error "Throw not in try")) ;Throw
+          (lambda(v thrown)(throw-c state thrown)) ;Like return, we throw out our manufactured state and return to the state above.
           (lambda(v) v))))))) ;Exits without return, provide whole state for debugging
 ;returns the new state after evaluating statement
 (define Mstate
   (lambda (statement state return-c break-c continue-c throw-c normal-c)
     (cond
       ((eq? (operator statement) 'begin)    (interpret_in_new_layer (cdr statement) (stateBegin state) return-c  break-c continue-c throw-c normal-c))
-      ((eq? (operator statement) 'return)   (return-c (Mvalue (operand1 statement) state)))
-      ((eq? (operator statement) 'var)      (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state) state)))
-      ((eq? (operator statement) '=)        (begin (setVar (operand1 statement) (Mvalue (operand2 statement) state) state) (normal-c state)))
+      ((eq? (operator statement) 'return)   (return-c (Mvalue (operand1 statement) state throw-c)))
+      ((eq? (operator statement) 'var)      (normal-c (addVar (operand1 statement) (Mvalue (operand2-or-empty statement) state throw-c) state)))
+      ((eq? (operator statement) '=)        (begin (setVar (operand1 statement) (Mvalue (operand2 statement) state throw-c) state) (normal-c state)))
       ((eq? (operator statement) 'if)       (Mstate_if (operand1 statement) (cddr statement) state return-c break-c continue-c throw-c normal-c)) ;cddr can have 1 or 2 statements in it: if 2 then it has an 'else' case.
       ((eq? (operator statement) 'while)    (Mstate_while (operand1 statement) (operand2 statement) state return-c normal-c continue-c throw-c normal-c))
       ((eq? (operator statement) 'try)      (Mstate_try (operand1 statement) (operand2 statement) (operand3 statement) state return-c break-c continue-c throw-c normal-c))
-      ((eq? (operator statement) 'throw)    (throw-c state (Mvalue (operand1 statement) state)))
+      ((eq? (operator statement) 'throw)    (throw-c state (Mvalue (operand1 statement) state throw-c)))
       ((eq? (operator statement) 'continue) (continue-c state))
       ((eq? (operator statement) 'break)    (break-c state))
       ((eq? (operator statement) 'function) (normal-c (define_function (operand1 statement) (operand2 statement) (operand3 statement) state)))
-      ((eq? (operator statement) 'funcall)  (begin (call_function (operand1 statement) (cddr statement) state) (normal-c state)))
+      ((eq? (operator statement) 'funcall)  (begin (call_function (operand1 statement) (cddr statement) state throw-c) (normal-c state)))
       (else (normal-c state))
     )))
 
 ;returns the boolean value of statement (or unknown value that could return a boolean)
+;Note: This may also evalute function calls that don't necessarily return booleans.
+;Also takes throw-c in case of a function call
 (define Mboolean
-  (lambda (statement state)
+  (lambda (statement state throw-c)
     (cond
       ((eq? statement 'true) #t)
       ((eq? statement 'false) #f)
       ((symbol? statement) (findVar statement state));variable
-      ((eq? (operator statement) '==) (eq? (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
-      ((eq? (operator statement) '!=) (not (eq? (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state))))
-      ((eq? (operator statement) '>)  (> (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
-      ((eq? (operator statement) '<)  (< (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
-      ((eq? (operator statement) '>=) (>= (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
-      ((eq? (operator statement) '<=) (<= (Mvalue (operand1 statement) state) (Mvalue (operand2 statement) state)))
+      ((eq? (operator statement) '==) (eq? (Mvalue (operand1 statement) state throw-c) (Mvalue (operand2 statement) state throw-c)))
+      ((eq? (operator statement) '!=) (not (eq? (Mvalue (operand1 statement) state throw-c) (Mvalue (operand2 statement) state throw-c))))
+      ((eq? (operator statement) '>)  (> (Mvalue (operand1 statement) state throw-c) (Mvalue (operand2 statement) state throw-c)))
+      ((eq? (operator statement) '<)  (< (Mvalue (operand1 statement) state throw-c) (Mvalue (operand2 statement) state throw-c)))
+      ((eq? (operator statement) '>=) (>= (Mvalue (operand1 statement) state throw-c) (Mvalue (operand2 statement) state throw-c)))
+      ((eq? (operator statement) '<=) (<= (Mvalue (operand1 statement) state throw-c) (Mvalue (operand2 statement) state throw-c)))
 
-      ((eq? (operator statement) '&&) (and (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
-      ((eq? (operator statement) '||) (or (Mboolean (operand1 statement) state) (Mboolean (operand2 statement) state)))
-      ((eq? (operator statement) '!)  (not (Mboolean (operand1 statement) state)))
-      ((eq? (operator statement) 'funcall)  (call_function (operand1 statement) (cddr statement) state))
-      ((eq? (operator statement) '=)        (setVar (operand1 statement) (Mvalue (operand2 statement) state) state))
+      ((eq? (operator statement) '&&) (and (Mboolean (operand1 statement) state throw-c) (Mboolean (operand2 statement) state throw-c)))
+      ((eq? (operator statement) '||) (or (Mboolean (operand1 statement) state throw-c) (Mboolean (operand2 statement) state throw-c)))
+      ((eq? (operator statement) '!)  (not (Mboolean (operand1 statement) state throw-c)))
+      ((eq? (operator statement) '=)        (setVar (operand1 statement) (Mvalue (operand2 statement) state throw-c) state))
+      ((eq? (operator statement) 'funcall)  (call_function (operand1 statement) (cddr statement) state throw-c))
       (else (error "Value/Boolean unable to be evaluated"))
     )))
 
 ;returns the value of expr
+;Also takes throw-c in case of a function call
 (define Mvalue
-  (lambda (expr state)
+  (lambda (expr state throw-c)
     (cond
      ((null? expr) expr)
      ((number? expr) expr)
      ((eq? expr 'true) #t)
      ((eq? expr 'false) #f)
      ((symbol? expr) (findVar expr state));variable
-     ((eq? (operator expr) '+) (+ (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
-     ((eq? (operator expr) '*) (* (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
-     ((eq? (operator expr) '/) (quotient (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
+     ((eq? (operator expr) '+) (+ (Mvalue (operand1 expr) state throw-c) (Mvalue (operand2 expr) state throw-c)))
+     ((eq? (operator expr) '*) (* (Mvalue (operand1 expr) state throw-c) (Mvalue (operand2 expr) state throw-c)))
+     ((eq? (operator expr) '/) (quotient (Mvalue (operand1 expr) state throw-c) (Mvalue (operand2 expr) state throw-c)))
      ((eq? (operator expr) '-) (if (eq? (length expr) 3)
-				   (- (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state))
-				   (- (Mvalue (operand1 expr) state))));unary - operator
-     ((eq? (operator expr) '%) (remainder (Mvalue (operand1 expr) state) (Mvalue (operand2 expr) state)))
-     (else (Mboolean expr state))
+				   (- (Mvalue (operand1 expr) state throw-c) (Mvalue (operand2 expr) state throw-c))
+				   (- (Mvalue (operand1 expr) state throw-c))));unary - operator
+     ((eq? (operator expr) '%) (remainder (Mvalue (operand1 expr) state throw-c) (Mvalue (operand2 expr) state throw-c)))
+     (else (Mboolean expr state throw-c))
      )))
 
 ;helper function for while loops
 (define Mstate_while
     (lambda (condition statement state return-c break-c continue-c throw-c normal-c)
-        (if (Mboolean condition state)
+        (if (Mboolean condition state throw-c)
             (Mstate statement state return-c break-c
                     (lambda (v) (Mstate_while condition statement v return-c break-c continue-c throw-c normal-c));Continue loop
                     throw-c
@@ -232,7 +239,7 @@
 ;statements is a list that is either 1 long (if only) or 2 long (if, else)
 (define Mstate_if
     (lambda (condition statements state return-c break-c continue-c throw-c normal-c)
-        (if (Mboolean condition state)
+        (if (Mboolean condition state throw-c)
             (Mstate (car statements) state return-c break-c continue-c throw-c normal-c)
             (if (pair? (cdr statements));Else is a pair
                 (Mstate (cadr statements) state return-c break-c continue-c throw-c normal-c)
