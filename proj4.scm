@@ -1,8 +1,8 @@
 ;Ron Weber and Steven Knipe
-(load "functionParser.scm")
+(load "classParser.scm")
 
 (define interpret
-  (lambda (filename)
+  (lambda (filename className)
     (outputNice (call_function 'main () (call/cc
       (lambda (return-c)
         (interpreter
@@ -103,7 +103,21 @@
   
 ;end of code for dealing with states/variables
 
+;The formula for our class will be:
+;Parent, list of fields, list of methods
+;Now for code that deals with classes
+(define classParent car)
+(define classInstanceFields cadr)
+(define classMethods caddr)
+(define makeClass
+  (lambda (parentName classList)
+    (list (findVar parentName classList) '() '())))
 
+(define objTruetype car)
+(define objFieldValues cadr)
+(define makeObject
+  (lambda (className classList)
+    (list (findVar className classList) '())))
 
 ;interprets code in parsetree
 (define interpreter
@@ -258,4 +272,4 @@
       (interpret_in_new_layer tryBody (stateBegin state) return-c break-c continue-c execute-catch execute-finally))));try block
                            
 
-(interpret "test");run the code
+(interpret "test" "A");run the code
