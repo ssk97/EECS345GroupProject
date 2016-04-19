@@ -138,6 +138,11 @@
         classList
         (makeClassList (cdr parseTree) (classEntry (car parseTree) classList)))))
 
+;Adds information to a class
+;Takes the parseTree of the class body.
+(define interpreter-class
+  (lambda (parseTree currentClass)
+    currentClass))
 
 ;Interprets statements, and adds a stateEnd to all of the continuations
 ;except for the return continuation, since we don't care about the state after that.
