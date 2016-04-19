@@ -1,5 +1,3 @@
 class A {
-  static function main() {
-    return 5;
-  }
 }
+class B extends A{}

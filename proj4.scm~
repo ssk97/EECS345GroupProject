@@ -110,10 +110,8 @@
 (define classInstanceFields cadr)
 (define classMethods caddr)
 (define makeClass
-  (lambda (extendsPair classList)
-    (if (null? extendsPair)
-        (list '() '() '())
-        (list (findVar (cadr extendsPair) classList) '() '()))))
+  (lambda (parentName classList)
+    (list (findVar parentName classList) '() '())))
 
 (define objTruetype car)
 (define objFieldValues cadr)
@@ -129,15 +127,6 @@
          (else (Mstate (car parsetree) state return-c break-c continue-c throw-c
                        (lambda (v)
                          (interpreter (cdr parsetree) v return-c break-c continue-c throw-c normal-c)))))))
-
-;Creates a class list
-;The top level parse tree should be a list of statements
-(define makeClassList
-  (lambda (parseTree classList)
-    (if (null? parseTree)
-        classList
-        (makeClassList (cdr parseTree) (classEntry (car parseTree) classList)))))
-
 
 ;Interprets statements, and adds a stateEnd to all of the continuations
 ;except for the return continuation, since we don't care about the state after that.
@@ -188,14 +177,6 @@
           (lambda(x)(error "Continue not in loop.")) ;Continue
           (lambda(v thrown)(throw-c state thrown)) ;Like return, we throw out our manufactured state and return to the state above.
           (lambda(v) v))))))) ;Exits without return, provide whole state for debugging
-
-;Adds the entry for the class defined by statement to classList
-(define classEntry
-  (lambda (statement classList)
-    (if (eq? (operator statement) 'class) ;Make sure this is actually a class statment we're looking at.
-        (addVar (operand1 statement) (makeClass (operand2 statement) classList) classList)
-        (error "Statement other than class at top level"))))
-
 ;returns the new state after evaluating statement
 (define Mstate
   (lambda (statement state return-c break-c continue-c throw-c normal-c)
