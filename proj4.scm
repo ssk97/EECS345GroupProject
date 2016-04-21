@@ -114,6 +114,11 @@
     (if (null? extendsPair)
         (list '() '() '())
         (list (findVar (cadr extendsPair) classList) '() '()))))
+(define addMethod
+  (lambda (name args fn class)
+    (list (classParent class)
+          (classInstanceFields class)
+          (define_function name args fn (classMethods class)))))
 
 (define objTruetype car)
 (define objFieldValues cadr)
@@ -206,7 +211,7 @@
 (define classBody
   (lambda (statement class)
     (cond
-      ((eq? (operator statement) 'function)  (define_function (operand1 statement) (operand2 statement) (operand3 statement) (classMethods class))))))
+      ((eq? (operator statement) 'function)  (addMethod (operand1 statement) (operand2 statement) (operand3 statement) class)))))
 
 ;returns the new state after evaluating statement
 (define Mstate
