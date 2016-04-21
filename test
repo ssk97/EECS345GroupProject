@@ -1,3 +1,11 @@
+
 class A {
+  function f() {
+    return 5;
+  }
+
+  static function main() {
+    var a = new A();
+    return a.f();
+  }
 }
-class B extends A{}

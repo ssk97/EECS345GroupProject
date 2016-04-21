@@ -139,7 +139,8 @@
         (makeClassList (cdr parseTree) (classEntry (car parseTree) classList)))))
 
 ;Adds information to a class
-;Takes the parseTree of the class body.
+;Takes the parseTree of the class body and the current class to add things like function calls to.
+;Returns the complete class.
 (define interpreter-class
   (lambda (parseTree currentClass)
     currentClass))
@@ -200,6 +201,12 @@
     (if (eq? (operator statement) 'class) ;Make sure this is actually a class statment we're looking at.
         (addVar (operand1 statement) (makeClass (operand2 statement) classList) classList)
         (error "Statement other than class at top level"))))
+
+;Evaluates a single statement in a class body and adds it to class.
+(define classBody
+  (lambda (statement class)
+    (cond
+      ((eq? (operator statement) 'function)  (define_function (operand1 statement) (operand2 statement) (operand3 statement) (classMethods class))))))
 
 ;returns the new state after evaluating statement
 (define Mstate
