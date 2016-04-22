@@ -1,11 +1,22 @@
-
 class A {
-  function f() {
-    return 5;
-  }
+      static function fn()
+      {
+	return 4;
+      }
 
+}
+
+class B extends A {
+      static function fns()
+      {
+	return 5;
+      }
+
+}
+
+
+class C extends B {
   static function main() {
-    var a = new A();
-    return a.f();
+    return fn() + fns();
   }
 }
