@@ -125,6 +125,14 @@
   (lambda (className classList)
     (list (findVar className classList) '())))
 
+;We have to store both the compile type of objects and the object itself.
+;Here are some helper functions for that.
+(define objectFromObjEntry cadr)
+(define classFromObjEntry car)
+(define makeObjectEntry
+  (lambda (className classList)
+    (list (findVar className classList) (makeObject className classList))))
+
 ;interprets code in parsetree
 (define interpreter
     (lambda (parsetree state return-c break-c continue-c throw-c normal-c this class classList)
@@ -295,6 +303,7 @@
      ((eq? expr 'true) #t)
      ((eq? expr 'false) #f)
      ((symbol? expr) (findVar expr state));variable
+     ((eq? (operator expr) 'new) (makeObjectEntry (operand1 expr) classList)) ;New statement.  Make a new object.
      ((eq? (operator expr) '+) (+ (Mvalue (operand1 expr) state throw-c this class classList) (Mvalue (operand2 expr) state throw-c this class classList)))
      ((eq? (operator expr) '*) (* (Mvalue (operand1 expr) state throw-c this class classList) (Mvalue (operand2 expr) state throw-c this class classList)))
      ((eq? (operator expr) '/) (quotient (Mvalue (operand1 expr) state throw-c this class classList) (Mvalue (operand2 expr) state throw-c this class classList)))

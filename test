@@ -17,6 +17,8 @@ class B extends A {
 
 class C extends B {
   static function main() {
-    return fn() + fns();
+  	 var hi = 4;
+	 var hio = new B();
+    return hio;
   }
 }
