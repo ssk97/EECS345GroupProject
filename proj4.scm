@@ -5,12 +5,15 @@
   (lambda (filename className)
     (let ([classList (makeClassList (parser filename) '(()))])
       (outputNice
-       (call_method
+       (call_function
         'main ;For now static functions are the same as dynamic functions
+        (getMethod 'main (findVar className classList))
         () ;No args.  It's main.
         '(()) ;No initial state
         (lambda (x y) (error "Throw not in try"))
         '() ;We don't do static methods, so we pass an invalid object and hope noone looks anything up.
+        (findVar className classList)
+        '()
         (findVar className classList)
         classList)))))
 
@@ -117,6 +120,12 @@
     (list (classParent class)
           (classInstanceFields class)
           (define_function name args fn (classMethods class)))))
+(define getMethod
+  (lambda (name class)
+    (cond
+      ((null? class) (error "Method not found."))
+      ((varExists  name (classMethods class)) (findVar name (classMethods class)))
+      (else (getMethod name (classParent class))))))
 
 ;TODO consider briefly the concept of fields.
 (define objTruetype car)
@@ -188,53 +197,34 @@
 ;returns a substate containing all of the args using state
 ;TODO- allow for by-reference/box rather than by-value passing.
 ;Throw-c needed for function chaining if one of the arguments throws. 
-(define evalArgs (lambda (args argvals state throw-c)
+(define evalArgs (lambda (args argvals state throw-c this class classList)
   (cond
     ((and (null? args) (null? argvals)) '())
     ((or (null? args) (null? argvals)) (error "Argument count does not match function definition"))
-    (else (addVar_sub (car args) (Mvalue (car argvals) state throw-c) (evalArgs (cdr args) (cdr argvals) state throw-c))))
+    (else (addVar_sub (car args) (Mvalue (car argvals) state throw-c this class classList) (evalArgs (cdr args) (cdr argvals) state throw-c this class classList))))
   ))
+  
 ;Call a function defined in state (only for functions inside methods).
 ;Create a new state from the state saved inside the function, and add the function itself to that state
-;name = Name of the function; args = A list of the variables sent as arguments to this function call; state = The state as the function is called; Throw-c = where to go when this function throws
+;name = The name of the function to call.  (Only needed for inner functions that might recurse). func = The function to call; args = A list of the variables sent as arguments to this function call; state = The state as the function is called; Throw-c = where to go when this function throws
 ;newThis = the object on which the method is called.  newClass = The class that newThis was called with.
+;currentThis and currentClass are needed for arg evaluations.
 (define call_function
-  (lambda (name args state throw-c newThis newClass)
-    (let ([func (findVar name state )])
-     (call/cc
-      (lambda (return-c)
-        (interpreter
-          (caddr func);function
-          (cons (addVar_sub name func (evalArgs (car func) args state throw-c)) (cadr func));new state, plus recursion opportunity
-          return-c ;Where return goes
-          (lambda(x)(error "Break not in loop.")) ;Break
-          (lambda(x)(error "Continue not in loop.")) ;Continue
-          (lambda(v thrown)(throw-c state thrown)) ;Like return, we throw out our manufactured state and return to the state above.
-          (lambda(v) v))))))) ;Exits without return, provide whole state for debugging
+  (lambda (name func args state throw-c newThis newClass currentThis currentClass classList)
+    (call/cc
+     (lambda (return-c)
+       (interpreter
+        (caddr func);function
+        (addVar 'this (list newClass newThis) (cons (addVar_sub name func (evalArgs (car func) args state throw-c currentThis currentClass classList)) (cadr func)));new state, plus recursion opportunity, plus this.
+        return-c ;Where return goes
+        (lambda(x)(error "Break not in loop.")) ;Break
+        (lambda(x)(error "Continue not in loop.")) ;Continue
+        (lambda(v thrown)(throw-c state thrown)) ;Like return, we throw out our manufactured state and return to the state above.
+        (lambda(v) v) ;Exits without return, provide whole state for debugging
+        newThis
+        newClass
+        classList)))))
 
-;Call a function named name from wherever it may be hiding.
-;Looks through state first, then the class of obj, then all of that class' parents.
-;Newthis will start as the true type of newThis, but may not stay that way.
-(define call_method
-  (lambda (name args state throw-c newThis newClass classList)
-    (cond
-      ((varExists name state) (call_function name args state throw-c newThis newClass)) ;It's actually function in a function.  Do that instead.
-      ((null? newClass) (error "Function not found."))
-      ((varExists name (classMethods newClass))
-       (call/cc
-        (lambda (return-c)
-          (interpreter
-           (caddr (findVar name (classMethods newClass)));Function
-           '(()) ;New state.  Recursion will be handled because this is a method call.
-           return-c
-           (lambda(x)(error "Break not in loop.")) ;Break
-           (lambda(x)(error "Continue not in loop.")) ;Continue
-           (lambda(v thrown)(throw-c state thrown)) ;Like return, we throw out our manufactured state and return to the state above.
-           (lambda(v) v)
-           newThis
-           newClass
-           classList)))) ;Exits without return, provide whole state for debugging
-      (else (call_method name args state throw-c newThis (classParent newClass) classList)))))
   
 ;Adds the entry for the class defined by statement to classList
 (define classEntry
@@ -265,9 +255,37 @@
       ((eq? (operator statement) 'continue) (continue-c state))
       ((eq? (operator statement) 'break)    (break-c state))
       ((eq? (operator statement) 'function) (normal-c (define_function (operand1 statement) (operand2 statement) (operand3 statement) state)))
-      ((eq? (operator statement) 'funcall)  (begin (call_method (operand1 statement) (cddr statement) state throw-c this class classList) (normal-c state))) ;Assuming we're calling methods on this.
+      ((eq? (operator statement) 'funcall)  (begin (call_function (operand1 statement) (Mvalue_function (operand1 statement) state throw-c this class classList) (cddr statement) state throw-c (objOfDot (operand1 statement)) (classOfDot (operand1 statement)) this class classList) (normal-c state)))
       (else (normal-c state))
     )))
+
+;Returns the function refered to by statement.
+(define Mvalue_function
+  (lambda (statement state throw-c this class classList)
+    (cond
+      ((symbol? statement) (if (varExists statement state) (findVar statement state) (getMethod statement class))) ;Just a variable.  It might be a function in state, or it might be a method of this.  Try both.
+      ((eq? (operator statement) 'dot) (if (eq? (operand1 statement) 'super) ;Is it super?
+                                           (getMethod (operand2 statement) (classParent class))
+                                           (getMethod (operand2 statement) (objTruetype (objectFromObjEntry (Mvalue (operand1 statement) state throw-c this class classList)))))) ;Look up the method on the object
+      (else (Mvalue statement state throw-c this class classList))))) ;It's probably a function call.  Throw this down to Mvalue and let them take care of this.
+                                                                                
+;Returns the type of the object on the left of the dot if statement is a dot.  Returns class otherwise
+(define classOfDot
+  (lambda (statement state throw-c this class classList)
+    (cond
+      ((not (pair? statement)) class) ;It's definently not a dot
+      ((not (eq? (operator statement) 'dot)) class) ;It's not a dot.
+      ((eq? (operand1 statement) 'super) (classParent class)) ;It's super.  Return our parent.
+      (else (classFromObjEntry (Mvalue (operand1 statement) state throw-c this class classList)))))) ;Do some evaluatin'
+
+;Returns the object on the left of the dot if statement is a dot.  Returns this otherwise
+(define objOfDot
+  (lambda (statement state throw-c this class classList)
+    (cond
+      ((not (pair? statement)) this) ;It's definently not a dot
+      ((not (eq? (operator statement) 'dot)) this) ;It's not a dot.
+      ((eq? (operand1 statement) 'super) this) ;It's super.  We should probably just return this.
+      (else (objectFromObjEntry (Mvalue (operand1 statement) state throw-c this class classList)))))) ;Do some evaluatin'
 
 ;returns the boolean value of statement (or unknown value that could return a boolean)
 ;Note: This may also evalute function calls that don't necessarily return booleans.
@@ -289,12 +307,14 @@
       ((eq? (operator statement) '||) (or (Mboolean (operand1 statement) state throw-c this class classList) (Mboolean (operand2 statement) state throw-c this class classList)))
       ((eq? (operator statement) '!)  (not (Mboolean (operand1 statement) state throw-c this class classList)))
       ((eq? (operator statement) '=)        (setVar (operand1 statement) (Mvalue (operand2 statement) state throw-c this class classList) state))
-      ((eq? (operator statement) 'funcall)  (call_method (operand1 statement) (cddr statement) state throw-c this class classList)) ;Again, we're assuming this.
+      ((eq? (operator statement) 'funcall)  (call_function (operand1 statement) (Mvalue_function (operand1 statement) state throw-c this class classList) (cddr statement) state throw-c (objOfDot (operand1 statement) state throw-c this class classList) (classOfDot (operand1 statement) state throw-c this class classList) this class classList)) 
       (else (error "Value/Boolean unable to be evaluated"))
     )))
 
 ;returns the value of expr
 ;Also takes throw-c in case of a function call
+;Cannot be used to find methods (it only looks for fields in case of the dot operator)
+;Function and method calls, however, are fine.
 (define Mvalue
   (lambda (expr state throw-c this class classList)
     (cond

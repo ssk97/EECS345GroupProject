@@ -1,5 +1,5 @@
 class A {
-      static function fn()
+      function fn()
       {
 	return 4;
       }
@@ -7,9 +7,24 @@ class A {
 }
 
 class B extends A {
-      static function fns()
+      function fns()
       {
 	return 5;
+      }
+
+      
+
+      function butts()
+      {
+	var a = 10;
+	if (a > 10)
+	{
+	return 4;
+	}
+	else
+	{
+	return a;
+	}
       }
 
 }
@@ -17,8 +32,15 @@ class B extends A {
 
 class C extends B {
   static function main() {
-  	 var hi = 4;
-	 var hio = new B();
-    return hio;
+    return new C().math(new B());
   }
+
+  function fns()
+  {
+	return super.fns() + super.butts();
+  }
+
+  function math(otherB){
+	 return this.fns() + otherB.butts();
+	 }
 }
