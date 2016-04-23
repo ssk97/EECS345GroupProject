@@ -7,14 +7,14 @@
       (outputNice
        (call_function
         'main ;For now static functions are the same as dynamic functions
-        (getMethod 'main (findVar className classList))
+        (getMethod 'main (findVar (string->symbol className) classList))
         () ;No args.  It's main.
         '(()) ;No initial state
         (lambda (x y) (error "Throw not in try"))
         '() ;We don't do static methods, so we pass an invalid object and hope noone looks anything up.
-        (findVar className classList)
+        (findVar (string->symbol className) classList)
         '()
-        (findVar className classList)
+        (findVar (string->symbol className) classList)
         classList)))))
 
 ;converts #t and #f to 'true and 'false respectively
@@ -366,4 +366,4 @@
       (interpret_in_new_layer tryBody (stateBegin state) return-c break-c continue-c execute-catch execute-finally this class classList))));try block
                            
 
-(interpret "test" 'C);run the code
+(interpret "test" "C");run the code
