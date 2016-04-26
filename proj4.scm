@@ -105,7 +105,7 @@
 ;end of code for dealing with states/variables
 
 ;The formula for our class will be:
-;Parent, list of fields, list of methods
+;Parent, substate of fields, substate of methods
 ;Now for code that deals with classes
 (define classParent car)
 (define classFields cadr)
@@ -343,7 +343,7 @@
     (cond
       ((eq? statement 'true) #t)
       ((eq? statement 'false) #f)
-      ((symbol? statement) (findVar statement state));variable
+      ((symbol? statement) (find_something statement state throw-c this class classList));variable
       ((eq? (operator statement) '==) (eq? (Mvalue (operand1 statement) state throw-c this class classList) (Mvalue (operand2 statement) state throw-c this class classList)))
       ((eq? (operator statement) '!=) (not (eq? (Mvalue (operand1 statement) state throw-c this class classList) (Mvalue (operand2 statement) state throw-c this class classList))))
       ((eq? (operator statement) '>)  (> (Mvalue (operand1 statement) state throw-c this class classList) (Mvalue (operand2 statement) state throw-c this class classList)))
