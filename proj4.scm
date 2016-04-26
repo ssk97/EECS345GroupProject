@@ -421,8 +421,8 @@
               (execute-catch
                (lambda(v thrown) (if (null? catch)
                                      ((execute-finally normal-c) v) ;no catch, just go straight to finally
-                                     (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) return-c break-c continue-c throw-c (execute-finally normal-c) this class classList)))))
-      (interpret_in_new_layer tryBody (stateBegin state) return-c break-c continue-c execute-catch (execute-finally normal-c) this class classList))));try block
+                                     (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) (lambda (whatReturn) ((execute-finally (lambda (state) (return-c whatReturn))) state)) (execute-finally break-c) (execute-finally continue-c) (lambda (state whatThrow) ((execute-finally (lambda (state2) (throw-c state whatThrow))) state)) (execute-finally normal-c) this class classList)))))
+      (interpret_in_new_layer tryBody (stateBegin state) (lambda (whatReturn) ((execute-finally (lambda (state) (return-c whatReturn))) state)) (execute-finally break-c) (execute-finally continue-c) execute-catch (execute-finally normal-c) this class classList))));try block
                            
 
 (interpret "test" "C");run the code
