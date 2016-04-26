@@ -60,3 +60,4 @@ class C {
     return x - b.count * 100;
   }
 }
+
