@@ -406,14 +406,23 @@
 (define Mstate_try
   (lambda (tryBody catch finally state return-c break-c continue-c throw-c normal-c this class classList)
     (let* ((execute-finally
-      (lambda(v) (if (null? finally)
-                     (normal-c v) ;No finally, just continue execution
-                     (interpret_in_new_layer (cadr finally) (stateBegin v) return-c break-c continue-c throw-c normal-c this class classList))))
-     (execute-catch
-      (lambda(v thrown) (if (null? catch)
-                     (execute-finally v) ;no catch, just go straight to finally
-                     (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) return-c break-c continue-c throw-c execute-finally this class classList)))))
-      (interpret_in_new_layer tryBody (stateBegin state) return-c break-c continue-c execute-catch execute-finally this class classList))));try block
+            (lambda (wherego)
+              (lambda(v) (if (null? finally)
+                              (wherego v) ;No finally, just continue execution
+                              (interpret_in_new_layer
+                               (cadr finally)
+                               (stateBegin v)
+                               return-c
+                               break-c
+                               continue-c
+                               throw-c
+                               wherego
+                               this class classList)))))
+              (execute-catch
+               (lambda(v thrown) (if (null? catch)
+                                     ((execute-finally normal-c) v) ;no catch, just go straight to finally
+                                     (interpret_in_new_layer (caddr catch) (addVar (caadr catch) thrown (stateBegin v)) return-c break-c continue-c throw-c (execute-finally normal-c) this class classList)))))
+      (interpret_in_new_layer tryBody (stateBegin state) return-c break-c continue-c execute-catch (execute-finally normal-c) this class classList))));try block
                            
 
-;(interpret "test" "C");run the code
+(interpret "test" "C");run the code
