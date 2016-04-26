@@ -316,14 +316,14 @@
       ((eq? (operator name) 'dot) (let* ;It must be a method of another object
         ([obj (Mvalue_function (operand1 name) state throw-c this class classList)]
         [func (getMethod (operand2 name) obj)])
-          (call_function (operand2 name) func args state throw-c obj (getMethodLayer (operand2 name) obj) this class classList)))
+          (call_function (operand2 name) func args state throw-c (getMethodLayer (operand2 name) obj) obj this class classList)))
       (else (error "function call could not resolve")))))
 ;Returns the object refered to by statement.
 (define Mvalue_function
   (lambda (statement state throw-c this class classList)
     (cond
-      ((eq? statement 'this) this)
-      ((and (list? statement) (eq? (operator statement) 'dot)) (objOfDot (operand2 statement) (Mvalue (operand1 statement) state throw-c this class classList))) ;Look up the method on the object
+      ((eq? statement 'this) class)
+      ((and (list? statement) (eq? (operator statement) 'dot)) (classOfDot (operand2 statement) (Mvalue (operand1 statement) state throw-c this class classList))) ;Look up the method on the object
       (else (Mvalue statement state throw-c this class classList))))) ;It's either a function call or new.  Throw this down to Mvalue and let them take care of this.
 
 ;Returns the object on the left of the dot if statement is a dot.  Returns this otherwise
